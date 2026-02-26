@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>SmartHome Cloud - Dashboard</title>
+    <meta name="description" content="Control your ESP32 Smart Home switches from anywhere">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Loading your devices...</p>
+    </div>
+
+    <div class="dashboard" id="mainDashboard" style="display:none;">
+        <!-- Header -->
+        <div class="dash-header">
+            <div>
+                <h1>🏠 SmartHome</h1>
+            </div>
+            <div class="nav-links">
+                <a href="dashboard.html" class="nav-link active">Dashboard</a>
+                <a href="admin.html" class="nav-link" id="adminLink" style="display:none;">Admin</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- User info -->
+        <div class="user-badge" style="margin-bottom:16px;">
+            <span>👤 <span id="userName">User</span></span>
+            <span style="color:var(--text-muted);">|</span>
+            <span>📱 Device: <strong id="userDeviceId">—</strong></span>
+        </div>
+
+        <!-- Device status -->
+        <div class="device-status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText" style="font-weight:600;">Checking...</span>
+            <span class="device-id-label" id="lastSeenLabel" style="margin-left:auto;"></span>
+        </div>
+
+        <!-- Switch Controls -->
+        <div class="controls-grid" id="controlsGrid">
+            <!-- Dynamically populated -->
+        </div>
+
+        <!-- ESP32 Setup Info -->
+        <div
+            style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:10px;">
+            <h3 style="margin-bottom:12px;font-size:1em;color:var(--text-secondary);">📡 ESP32 Setup</h3>
+            <p style="color:var(--text-muted);font-size:0.85em;line-height:1.6;">
+                Your ESP32 must be connected to WiFi and configured with Device ID: <strong id="setupDeviceId"
+                    style="color:var(--accent-blue);"></strong><br>
+                Update <code
+                    style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;">config.h</code> on your
+                ESP32 with your Firebase credentials and this Device ID.
+            </p>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+    <script>
+        const switchIcons = ['💡', '🛏️', '🍳', '🌀', '💡', '💡', '💡', '💡'];
+        let currentDeviceId = localStorage.getItem('deviceId');
+
+        requireAuth(async (user) => {
+            // Get user info
+            const userSnap = await db.ref('users/' + user.uid).once('value');
+            const userData = userSnap.val();
+
+            if (!currentDeviceId && userData) {
+                currentDeviceId = userData.deviceId;
+                localStorage.setItem('deviceId', currentDeviceId);
+            }
+
+            if (!currentDeviceId) {
+                logout();
+                return;
+            }
+
+            // Show username
+            document.getElementById('userName').textContent = userData ? userData.name : 'User';
+            document.getElementById('userDeviceId').textContent = currentDeviceId;
+            document.getElementById('setupDeviceId').textContent = currentDeviceId;
+
+            // Check admin
+            const isAdminUser = await isAdmin(user.uid);
+            if (isAdminUser) {
+                document.getElementById('adminLink').style.display = 'inline-block';
+            }
+
+            // Listen for device data (real-time!)
+            db.ref('devices/' + currentDeviceId).on('value', (snapshot) => {
+                const device = snapshot.val();
+                if (!device) {
+                    document.getElementById('controlsGrid').innerHTML =
+                        '<p style="text-align:center;color:var(--accent-red);padding:30px;">Device not found. Check your Device ID.</p>';
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                    document.getElementById('mainDashboard').style.display = 'block';
+                    return;
+                }
+
+                // Update online status
+                const dot = document.getElementById('statusDot');
+                const txt = document.getElementById('statusText');
+                const lastSeen = document.getElementById('lastSeenLabel');
+
+                if (device.online) {
+                    dot.className = 'status-dot online';
+                    txt.textContent = 'ESP32 Online';
+                    txt.style.color = 'var(--accent-green)';
+                } else {
+                    dot.className = 'status-dot offline';
+                    txt.textContent = 'ESP32 Offline';
+                    txt.style.color = 'var(--accent-red)';
+                }
+
+                if (device.lastSeen) {
+                    const ago = getTimeAgo(device.lastSeen);
+                    lastSeen.textContent = 'Last seen: ' + ago;
+                }
+
+                // Render switches
+                renderSwitches(device);
+
+                // Show dashboard
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('mainDashboard').style.display = 'block';
+            });
+        });
+
+        function renderSwitches(device) {
+            const grid = document.getElementById('controlsGrid');
+            const relays = device.relays || {};
+            let html = '';
+
+            Object.keys(relays).sort().forEach((key, idx) => {
+                const relay = relays[key];
+                const isOn = relay.state === true;
+                const name = relay.name || 'Switch ' + (idx + 1);
+                const icon = switchIcons[idx] || '💡';
+
+                html += `
+                <div class="switch-card" onclick="toggleRelay('${currentDeviceId}', '${key}', ${isOn})">
+                    <div class="switch-info">
+                        <span class="switch-icon">${icon}</span>
+                        <div>
+                            <div class="switch-name">${name}</div>
+                            <div class="switch-status">${isOn ? '🟢 ON' : '⚫ OFF'}</div>
+                        </div>
+                    </div>
+                    <label class="toggle" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${isOn ? 'checked' : ''} 
+                               onchange="toggleRelay('${currentDeviceId}', '${key}', ${isOn})">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>`;
+            });
+
+            grid.innerHTML = html;
+        }
+
+        function getTimeAgo(timestamp) {
+            // If timestamp is in seconds range (9-10 digits = year ~2001-2286)
+            // vs milliseconds (13 digits). Safely convert seconds -> ms.
+            let tsMs = (timestamp > 1e9 && timestamp < 1e11) ? timestamp * 1000 : timestamp;
+            const diffMs = Date.now() - tsMs;
+            // If still negative or absurdly large, just show 'Just now'
+            if (diffMs < 0 || diffMs > 1e12) return 'Just now';
+            const seconds = Math.floor(diffMs / 1000);
+            if (seconds < 5) return 'Just now';
+            if (seconds < 60) return seconds + ' sec ago';
+            if (seconds < 3600) return Math.floor(seconds / 60) + ' min ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
+            return Math.floor(seconds / 86400) + ' days ago';
+        }
+    </script>
+</body>
+
+</html>

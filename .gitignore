@@ -1,0 +1,26 @@
+# Firebase
+.firebase/
+firebase-debug.log
+.firebaserc
+
+# Node / npm
+node_modules/
+npm-debug.log
+
+# Arduino build artifacts
+*.hex
+*.elf
+*.bin
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.code-workspace
+
+# Secrets (never commit these!)
+# firebaseSync.h has FIREBASE_AUTH - make sure to remove the real secret before committing
