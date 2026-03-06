@@ -3,6 +3,13 @@
  * Handles: auth tokens, API helpers, relay toggle helpers
  */
 
+/* ── Backend URL ─────────────────────────────────────────────────────────
+   Set BACKEND_URL to your Railway backend URL after deploying.
+   Leave as empty string '' to use same-origin (local dev / ngrok).
+   Example: 'https://homecontrol-backend.up.railway.app'
+──────────────────────────────────────────────────────────────────────── */
+const BACKEND_URL = ''; // ← paste Railway URL here after deploy
+
 /* ── Token / Auth ──────────────────────────────────────────────────────── */
 
 const TOKEN_KEY = 'hc_token';
@@ -43,8 +50,8 @@ function logout() {
 /* ── API Base URL ─────────────────────────────────────────────────────── */
 
 function apiBase() {
-    // Works whether served from same host or localhost
-    return window.location.origin;
+    // Use BACKEND_URL if set, otherwise fall back to same origin (local dev)
+    return BACKEND_URL || window.location.origin;
 }
 
 /* ── API Helpers ───────────────────────────────────────────────────────── */
@@ -85,8 +92,10 @@ async function toggleRelay(deviceId, relayKey, newState) {
 /* ── WebSocket URL ─────────────────────────────────────────────────────── */
 
 function wsUrl(path) {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${location.host}${path}`;
+    const base = BACKEND_URL || window.location.origin;
+    const proto = base.startsWith('https') ? 'wss' : 'ws';
+    const host = base.replace(/^https?:\/\//, '');
+    return `${proto}://${host}${path}`;
 }
 
 /* ── Relay icon helper ─────────────────────────────────────────────────── */
