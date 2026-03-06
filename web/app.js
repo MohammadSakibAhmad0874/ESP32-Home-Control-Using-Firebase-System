@@ -8,7 +8,7 @@
    Leave as empty string '' to use same-origin (local dev / ngrok).
    Example: 'https://homecontrol-backend.up.railway.app'
 ──────────────────────────────────────────────────────────────────────── */
-const BACKEND_URL = ''; // ← paste Railway URL here after deploy
+const BACKEND_URL = 'https://esp32-home-control-using-firebase-system-production.up.railway.app'; // Railway backend
 
 /* ── Token / Auth ──────────────────────────────────────────────────────── */
 
