@@ -3,27 +3,46 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>SmartHome Cloud - Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeControl — Dashboard</title>
     <meta name="description" content="Control your ESP32 Smart Home switches from anywhere">
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
     <!-- Loading overlay -->
     <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
-        <p>Loading your devices...</p>
+        <div id="loadingContent">
+            <div class="spinner"></div>
+            <p>Connecting to your device...</p>
+        </div>
+        <div id="loadingError" style="display:none;text-align:center;padding:20px;">
+            <p style="color:#f87171;font-size:1.1em;margin-bottom:16px;">❌ <span id="loadingErrorMsg">Cannot reach
+                    server.</span></p>
+            <p style="color:#94a3b8;font-size:0.85em;margin-bottom:20px;">Make sure Docker is running with
+                <code>start_server.bat</code>
+            </p>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button onclick="location.reload()"
+                    style="background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:0.9em;">🔄
+                    Retry</button>
+                <button onclick="logout()"
+                    style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);padding:10px 20px;border-radius:8px;cursor:pointer;font-size:0.9em;">🚪
+                    Back to Login</button>
+            </div>
+        </div>
     </div>
 
     <div class="dashboard" id="mainDashboard" style="display:none;">
         <!-- Header -->
         <div class="dash-header">
             <div>
-                <h1>🏠 SmartHome</h1>
+                <h1>🏠 HomeControl</h1>
             </div>
             <div class="nav-links">
                 <a href="dashboard.html" class="nav-link active">Dashboard</a>
@@ -39,6 +58,14 @@
             <span>📱 Device: <strong id="userDeviceId">—</strong></span>
         </div>
 
+        <!-- WebSocket connection indicator -->
+        <div id="wsStatusBar" style="
+            background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);
+            border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:0.82em;
+            color:#eab308;display:none;text-align:center;">
+            ⚡ Connecting real-time link...
+        </div>
+
         <!-- Device status -->
         <div class="device-status">
             <div class="status-dot" id="statusDot"></div>
@@ -47,101 +74,139 @@
         </div>
 
         <!-- Switch Controls -->
-        <div class="controls-grid" id="controlsGrid">
-            <!-- Dynamically populated -->
-        </div>
+        <div class="controls-grid" id="controlsGrid"></div>
 
-        <!-- ESP32 Setup Info -->
+        <!-- Info card -->
         <div
             style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-top:10px;">
             <h3 style="margin-bottom:12px;font-size:1em;color:var(--text-secondary);">📡 ESP32 Setup</h3>
             <p style="color:var(--text-muted);font-size:0.85em;line-height:1.6;">
-                Your ESP32 must be connected to WiFi and configured with Device ID: <strong id="setupDeviceId"
-                    style="color:var(--accent-blue);"></strong><br>
-                Update <code
-                    style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;">config.h</code> on your
-                ESP32 with your Firebase credentials and this Device ID.
+                Configure your ESP32 with:<br>
+                Device ID: <strong id="setupDeviceId" style="color:var(--accent-blue);"></strong><br>
+                Server: <code id="serverUrl"
+                    style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;"></code>
             </p>
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
     <script>
+        const deviceId = getDeviceId();
+        const token = getToken();
         const switchIcons = ['💡', '🛏️', '🍳', '🌀', '💡', '💡', '💡', '💡'];
-        let currentDeviceId = localStorage.getItem('deviceId');
+        let deviceData = null;
+        let ws = null;
+        let wsRetries = 0;
 
-        requireAuth(async (user) => {
-            // Get user info
-            const userSnap = await db.ref('users/' + user.uid).once('value');
-            const userData = userSnap.val();
+        requireAuth(init);
 
-            if (!currentDeviceId && userData) {
-                currentDeviceId = userData.deviceId;
-                localStorage.setItem('deviceId', currentDeviceId);
-            }
+        function init() {
+            document.getElementById('userName').textContent = localStorage.getItem('hc_name') || 'User';
+            document.getElementById('userDeviceId').textContent = deviceId;
+            document.getElementById('setupDeviceId').textContent = deviceId;
+            document.getElementById('serverUrl').textContent = window.location.host;
 
-            if (!currentDeviceId) {
-                logout();
-                return;
-            }
-
-            // Show username
-            document.getElementById('userName').textContent = userData ? userData.name : 'User';
-            document.getElementById('userDeviceId').textContent = currentDeviceId;
-            document.getElementById('setupDeviceId').textContent = currentDeviceId;
-
-            // Check admin
-            const isAdminUser = await isAdmin(user.uid);
-            if (isAdminUser) {
+            if (localStorage.getItem('hc_is_admin') === '1') {
                 document.getElementById('adminLink').style.display = 'inline-block';
             }
 
-            // Listen for device data (real-time!)
-            db.ref('devices/' + currentDeviceId).on('value', (snapshot) => {
-                const device = snapshot.val();
-                if (!device) {
-                    document.getElementById('controlsGrid').innerHTML =
-                        '<p style="text-align:center;color:var(--accent-red);padding:30px;">Device not found. Check your Device ID.</p>';
-                    document.getElementById('loadingOverlay').style.display = 'none';
-                    document.getElementById('mainDashboard').style.display = 'block';
-                    return;
-                }
+            // Load initial data then open WebSocket
+            loadDevice();
+        }
 
-                // Update online status
-                const dot = document.getElementById('statusDot');
-                const txt = document.getElementById('statusText');
-                const lastSeen = document.getElementById('lastSeenLabel');
-
-                if (device.online) {
-                    dot.className = 'status-dot online';
-                    txt.textContent = 'ESP32 Online';
-                    txt.style.color = 'var(--accent-green)';
-                } else {
-                    dot.className = 'status-dot offline';
-                    txt.textContent = 'ESP32 Offline';
-                    txt.style.color = 'var(--accent-red)';
-                }
-
-                if (device.lastSeen) {
-                    const ago = getTimeAgo(device.lastSeen);
-                    lastSeen.textContent = 'Last seen: ' + ago;
-                }
-
-                // Render switches
-                renderSwitches(device);
-
-                // Show dashboard
+        async function loadDevice() {
+            try {
+                deviceData = await apiGet('/api/devices/' + deviceId);
+                renderDevice(deviceData);
                 document.getElementById('loadingOverlay').style.display = 'none';
                 document.getElementById('mainDashboard').style.display = 'block';
-            });
-        });
+                connectWebSocket();
+            } catch (err) {
+                document.getElementById('loadingContent').style.display = 'none';
+                document.getElementById('loadingErrorMsg').textContent = err.message || 'Cannot reach server.';
+                document.getElementById('loadingError').style.display = 'block';
+            }
+        }
 
-        function renderSwitches(device) {
+        // ── WebSocket real-time updates ────────────────────────────────────
+
+        function connectWebSocket() {
+            const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+            const wsUrl = `${wsProto}://${location.host}/ws/dashboard/${deviceId}?token=${token}&ngrok-skip-browser-warning=1`;
+
+            document.getElementById('wsStatusBar').style.display = 'block';
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                wsRetries = 0;
+                document.getElementById('wsStatusBar').style.display = 'none';
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleWSMessage(msg);
+            };
+
+            ws.onclose = () => {
+                // Auto-reconnect with exponential backoff
+                if (wsRetries < 10) {
+                    wsRetries++;
+                    const delay = Math.min(1000 * wsRetries, 15000);
+                    document.getElementById('wsStatusBar').style.display = 'block';
+                    document.getElementById('wsStatusBar').textContent = `⚡ Reconnecting in ${Math.round(delay / 1000)}s...`;
+                    setTimeout(connectWebSocket, delay);
+                }
+            };
+
+            ws.onerror = () => { ws.close(); };
+        }
+
+        function handleWSMessage(msg) {
+            if (!msg.type) return;
+
+            if (msg.type === 'snapshot') {
+                deviceData = msg.device;
+                renderDevice(deviceData);
+            } else if (msg.type === 'status') {
+                updateOnlineStatus(msg.online, deviceData?.last_seen);
+            } else if (msg.type === 'relay_update') {
+                // A single relay changed
+                if (deviceData?.relays?.[msg.relay_key]) {
+                    deviceData.relays[msg.relay_key].state = msg.state;
+                    renderRelays(deviceData);
+                }
+            } else if (msg.type === 'full_update') {
+                // ESP32 reported full state (physical button press)
+                Object.entries(msg.states).forEach(([key, val]) => {
+                    if (deviceData?.relays?.[key]) deviceData.relays[key].state = val;
+                });
+                renderRelays(deviceData);
+            } else if (msg.type === 'heartbeat') {
+                updateOnlineStatus(true, msg.last_seen);
+            }
+        }
+
+        // ── Rendering ──────────────────────────────────────────────────────
+
+        function renderDevice(device) {
+            updateOnlineStatus(device.online, device.last_seen);
+            renderRelays(device);
+        }
+
+        function updateOnlineStatus(online, lastSeen) {
+            const dot = document.getElementById('statusDot');
+            const txt = document.getElementById('statusText');
+            const lbl = document.getElementById('lastSeenLabel');
+
+            dot.className = 'status-dot ' + (online ? 'online' : 'offline');
+            txt.textContent = online ? 'ESP32 Online' : 'ESP32 Offline';
+            txt.style.color = online ? 'var(--accent-green)' : 'var(--accent-red)';
+
+            if (lastSeen) lbl.textContent = 'Last seen: ' + getTimeAgo(lastSeen);
+        }
+
+        function renderRelays(device) {
             const grid = document.getElementById('controlsGrid');
             const relays = device.relays || {};
             let html = '';
@@ -153,7 +218,8 @@
                 const icon = switchIcons[idx] || '💡';
 
                 html += `
-                <div class="switch-card" onclick="toggleRelay('${currentDeviceId}', '${key}', ${isOn})">
+                <div class="switch-card ${isOn ? 'active' : ''}"
+                     onclick="handleToggle('${key}', ${isOn})">
                     <div class="switch-info">
                         <span class="switch-icon">${icon}</span>
                         <div>
@@ -162,8 +228,8 @@
                         </div>
                     </div>
                     <label class="toggle" onclick="event.stopPropagation()">
-                        <input type="checkbox" ${isOn ? 'checked' : ''} 
-                               onchange="toggleRelay('${currentDeviceId}', '${key}', ${isOn})">
+                        <input type="checkbox" ${isOn ? 'checked' : ''}
+                               onchange="handleToggle('${key}', ${isOn})">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>`;
@@ -172,19 +238,16 @@
             grid.innerHTML = html;
         }
 
-        function getTimeAgo(timestamp) {
-            // If timestamp is in seconds range (9-10 digits = year ~2001-2286)
-            // vs milliseconds (13 digits). Safely convert seconds -> ms.
-            let tsMs = (timestamp > 1e9 && timestamp < 1e11) ? timestamp * 1000 : timestamp;
-            const diffMs = Date.now() - tsMs;
-            // If still negative or absurdly large, just show 'Just now'
-            if (diffMs < 0 || diffMs > 1e12) return 'Just now';
-            const seconds = Math.floor(diffMs / 1000);
-            if (seconds < 5) return 'Just now';
-            if (seconds < 60) return seconds + ' sec ago';
-            if (seconds < 3600) return Math.floor(seconds / 60) + ' min ago';
-            if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
-            return Math.floor(seconds / 86400) + ' days ago';
+        async function handleToggle(relayKey, currentState) {
+            // Optimistic UI update
+            if (deviceData?.relays?.[relayKey]) {
+                deviceData.relays[relayKey].state = !currentState;
+                renderRelays(deviceData);
+            }
+            // API call (backend also forwards to ESP32 via WS)
+            try {
+                await apiPost(`/api/devices/${deviceId}/relay/${relayKey}`, { state: !currentState });
+            } catch (_) { /* revert on next WS snapshot */ }
         }
     </script>
 </body>

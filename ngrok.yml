@@ -1,0 +1,14 @@
+# Ngrok v3 configuration — HomeControl
+# YOUR PERMANENT FREE DOMAIN: cespitosely-exiguous-homer.ngrok-free.dev
+# This domain is yours forever — it never changes!
+
+version: "3"
+
+agent:
+  authtoken: "3AQpSnEjgbygw2N7LOgBxjm9ZPH_5CAq8EWvDd8TXZA4U1puA"
+
+tunnels:
+  homecontrol:
+    proto: http
+    addr: 80
+    domain: "cespitosely-exiguous-homer.ngrok-free.dev"

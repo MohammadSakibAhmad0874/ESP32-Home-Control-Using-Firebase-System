@@ -25,7 +25,7 @@
 #include <ESPmDNS.h>
 #endif
 
-#include "firebaseSync.h"
+#include "serverSync.h"   // NEW: WebSocket sync (replaces Firebase)
 
 WebServer server(WEB_SERVER_PORT);
 

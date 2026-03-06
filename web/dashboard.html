@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeControl — Dashboard</title>
+    <meta name="description" content="Control your smart home devices in real-time.">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            padding-top: 0;
+        }
+
+        #mainContent {
+            display: none;
+        }
+
+        /* Rename modal */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-backdrop.open {
+            display: flex;
+        }
+
+        .modal {
+            background: #131520;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+            animation: fadeIn .2s ease;
+        }
+
+        .modal h3 {
+            font-size: 17px;
+            margin-bottom: 16px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        .last-seen-text {
+            font-size: 12px;
+            color: var(--text-3);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: var(--text-2);
+            margin-bottom: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="nav-brand">
+                <span>🏠</span> HomeControl
+            </div>
+            <div class="nav-right">
+                <div class="nav-user">Hey, <strong id="navName">—</strong></div>
+                <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Connecting -->
+    <div id="connectingScreen" class="container">
+        <div class="connecting-overlay">
+            <div class="spinner"></div>
+            <p>Connecting to your device…</p>
+        </div>
+    </div>
+
+    <!-- Main -->
+    <div id="mainContent" class="container">
+        <div class="page-header">
+            <h1>Device Dashboard</h1>
+            <p>Control your relays in real-time</p>
+        </div>
+
+        <!-- Device Info Bar -->
+        <div class="device-info-bar" id="deviceInfoBar">
+            <span class="info-item">
+                📟 <strong id="infoDeviceId">—</strong>
+            </span>
+            <span id="statusBadge" class="badge badge-offline"><span class="dot"></span> Offline</span>
+            <span class="info-item">
+                📡 IP: <strong id="infoIp">—</strong>
+            </span>
+            <span class="info-item last-seen-text">
+                ⏱ Last seen: <span id="infoLastSeen">—</span>
+            </span>
+            <button class="btn btn-ghost btn-sm" onclick="openRenameModal(null)" id="btnRenameFirst"
+                style="margin-left:auto" title="Rename switches">✏️ Rename</button>
+        </div>
+
+        <!-- Relays Grid -->
+        <p class="section-title">Switches</p>
+        <div class="relays-grid" id="relaysGrid">
+            <div class="empty-state">
+                <div class="empty-icon">🔌</div>
+                <h3>No switches found</h3>
+                <p>Register or reconnect your device.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="modal-backdrop" id="renameModal">
+        <div class="modal">
+            <h3>✏️ Rename Switch</h3>
+            <div class="form-group">
+                <label for="renameInput">New Name</label>
+                <input type="text" id="renameInput" placeholder="e.g. Living Room Light" maxlength="40">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeRenameModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitRename()" id="renameSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        requireAuth();
+
+        const deviceId = getDeviceId();
+        document.getElementById('navName').textContent = getName();
+        document.getElementById('infoDeviceId').textContent = deviceId;
+
+        let ws = null;
+        let currentRelays = {};     // { relay1: { name, state }, ... }
+        let renameTarget = null;   // relay key being renamed
+        let lastSeenTimer = null;
+        let lastSeenTs = 0;
+
+        /* ── Bootstrap ─────────────────────────────────────────────────────── */
+
+        async function init() {
+            try {
+                const device = await apiGet(`/api/devices/${deviceId}`);
+                renderDevice(device);
+                showMain();
+                connectWS();
+            } catch (err) {
+                // Token invalid → back to login
+                if (err.message.includes('401') || err.message.includes('authenticated')) {
+                    clearAuth();
+                    window.location.href = '/index.html';
+                } else {
+                    showMain();
+                    connectWS();
+                }
+            }
+        }
+
+        function showMain() {
+            document.getElementById('connectingScreen').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        /* ── WebSocket ─────────────────────────────────────────────────────── */
+
+        function connectWS() {
+            if (ws) ws.close();
+            const url = wsUrl(`/ws/dashboard/${deviceId}?token=${getToken()}`);
+            ws = new WebSocket(url);
+
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                handleWSMessage(msg);
+            };
+
+            ws.onclose = () => {
+                setTimeout(connectWS, 5000);
+            };
+        }
+
+        function handleWSMessage(msg) {
+            if (msg.type === 'snapshot') {
+                renderDevice(msg.device);
+            } else if (msg.type === 'relay_update') {
+                updateRelayState(msg.relay_key, msg.state);
+            } else if (msg.type === 'full_update') {
+                Object.entries(msg.states || {}).forEach(([key, state]) => updateRelayState(key, state));
+            } else if (msg.type === 'status') {
+                setOnlineStatus(msg.online);
+            } else if (msg.type === 'heartbeat') {
+                lastSeenTs = msg.last_seen;
+                setOnlineStatus(true);
+            }
+        }
+
+        /* ── Render ─────────────────────────────────────────────────────────── */
+
+        function renderDevice(device) {
+            currentRelays = device.relays || {};
+            setOnlineStatus(device.online);
+            document.getElementById('infoIp').textContent = device.ip_address || '—';
+            lastSeenTs = device.last_seen;
+            renderRelays();
+        }
+
+        function renderRelays() {
+            const grid = document.getElementById('relaysGrid');
+            grid.innerHTML = '';
+
+            const keys = Object.keys(currentRelays).sort();
+            if (!keys.length) {
+                grid.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">🔌</div><h3>No switches</h3></div>`;
+                return;
+            }
+
+            keys.forEach(key => {
+                const relay = currentRelays[key];
+                const isOn = relay.state;
+                const card = document.createElement('div');
+                card.className = `relay-card${isOn ? ' on' : ''}`;
+                card.id = `card-${key}`;
+                card.innerHTML = `
+          <div class="relay-header">
+            <span class="relay-icon">${relayIcon(relay.name)}</span>
+            <button class="btn btn-ghost btn-sm" title="Rename"
+              onclick="openRenameModal('${key}')">✏️</button>
+          </div>
+          <div class="relay-name">${relay.name}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span class="relay-state-label ${isOn ? 'on' : 'off'}" id="label-${key}">
+              ${isOn ? 'ON' : 'OFF'}
+            </span>
+            <label class="toggle-switch">
+              <input type="checkbox" ${isOn ? 'checked' : ''}
+                onchange="handleToggle('${key}', this.checked)" id="toggle-${key}">
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        `;
+                grid.appendChild(card);
+            });
+
+            // Start last-seen updater
+            startLastSeenTimer();
+        }
+
+        function updateRelayState(relayKey, state) {
+            if (!currentRelays[relayKey]) return;
+            currentRelays[relayKey].state = state;
+
+            const card = document.getElementById(`card-${relayKey}`);
+            const label = document.getElementById(`label-${relayKey}`);
+            const toggle = document.getElementById(`toggle-${relayKey}`);
+
+            if (card) {
+                card.classList.toggle('on', state);
+            }
+            if (label) {
+                label.textContent = state ? 'ON' : 'OFF';
+                label.className = `relay-state-label ${state ? 'on' : 'off'}`;
+            }
+            if (toggle) toggle.checked = state;
+        }
+
+        /* ── Toggle ─────────────────────────────────────────────────────────── */
+
+        async function handleToggle(relayKey, newState) {
+            // Optimistic UI
+            updateRelayState(relayKey, newState);
+            try {
+                await toggleRelay(deviceId, relayKey, newState);
+            } catch {
+                // Revert on failure
+                updateRelayState(relayKey, !newState);
+                const toggle = document.getElementById(`toggle-${relayKey}`);
+                if (toggle) toggle.checked = !newState;
+            }
+        }
+
+        /* ── Status ─────────────────────────────────────────────────────────── */
+
+        function setOnlineStatus(online) {
+            const badge = document.getElementById('statusBadge');
+            if (badge) {
+                badge.className = `badge ${online ? 'badge-online' : 'badge-offline'}`;
+                badge.innerHTML = `<span class="dot"></span> ${online ? 'Online' : 'Offline'}`;
+            }
+        }
+
+        function startLastSeenTimer() {
+            if (lastSeenTimer) clearInterval(lastSeenTimer);
+            lastSeenTimer = setInterval(() => {
+                document.getElementById('infoLastSeen').textContent = timeAgo(lastSeenTs);
+            }, 10000);
+            document.getElementById('infoLastSeen').textContent = timeAgo(lastSeenTs);
+        }
+
+        /* ── Rename Modal ───────────────────────────────────────────────────── */
+
+        function openRenameModal(key) {
+            renameTarget = key;
+            const input = document.getElementById('renameInput');
+            input.value = key ? (currentRelays[key]?.name || '') : '';
+            document.getElementById('renameModal').classList.add('open');
+            setTimeout(() => input.focus(), 50);
+        }
+
+        function closeRenameModal() {
+            document.getElementById('renameModal').classList.remove('open');
+            renameTarget = null;
+        }
+
+        async function submitRename() {
+            if (!renameTarget) return;
+            const name = document.getElementById('renameInput').value.trim();
+            if (!name) return;
+            const btn = document.getElementById('renameSaveBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            try {
+                await apiPut(`/api/devices/${deviceId}/relay/${renameTarget}/rename`, { name });
+                if (currentRelays[renameTarget]) {
+                    currentRelays[renameTarget].name = name;
+                    // Re-render to pick up new name + icon
+                    renderRelays();
+                }
+            } catch { }
+            closeRenameModal();
+            btn.disabled = false;
+            btn.textContent = 'Save';
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('renameModal').addEventListener('click', function (e) {
+            if (e.target === this) closeRenameModal();
+        });
+
+        // Enter key to save rename
+        document.getElementById('renameInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') submitRename();
+        });
+
+        init();
+    </script>
+</body>
+
+</html>

@@ -1,25 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartHome Cloud - Login</title>
+    <title>HomeControl — Login</title>
     <meta name="description" content="Control your ESP32 Smart Home from anywhere in the world">
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body>
-    <!-- Loading overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
-        <p>Loading SmartHome Cloud...</p>
-    </div>
 
+<body>
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-logo">
                 <span class="icon">🏠</span>
-                <h1>SmartHome Cloud</h1>
-                <p>Control your home from anywhere</p>
+                <h1>HomeControl</h1>
+                <p>Self-hosted smart home — no Firebase, yours forever</p>
             </div>
 
             <div id="errorMsg" class="error-msg"></div>
@@ -27,8 +28,8 @@
 
             <!-- Tabs -->
             <div class="auth-tabs">
-                <button class="auth-tab active" onclick="switchTab('login')">Login</button>
-                <button class="auth-tab" onclick="switchTab('register')">Register Device</button>
+                <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">Login</button>
+                <button class="auth-tab" id="tab-register" onclick="switchTab('register')">Register Device</button>
             </div>
 
             <!-- Login Form -->
@@ -39,7 +40,8 @@
                 </div>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+                    <input type="password" id="loginPassword" placeholder="Enter your password" required
+                        autocomplete="current-password">
                 </div>
                 <button type="submit" class="btn btn-primary" id="loginBtn">🔑 Login to Dashboard</button>
             </form>
@@ -48,7 +50,7 @@
             <form id="registerForm" class="auth-form" onsubmit="handleRegister(event)">
                 <div class="form-group">
                     <label>Your Name</label>
-                    <input type="text" id="regName" placeholder="e.g. Mehta" required>
+                    <input type="text" id="regName" placeholder="e.g. Ghosty" required>
                 </div>
                 <div class="form-group">
                     <label>New Device ID</label>
@@ -71,34 +73,18 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="firebase-config.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
     <script>
-        // Hide loading overlay
-        document.getElementById('loadingOverlay').style.display = 'none';
-
-        // Check if already logged in
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                window.location.href = 'dashboard.html';
-            }
-        });
+        // If already logged in, go directly to dashboard
+        if (getToken()) {
+            window.location.href = '/cloud/dashboard.html';
+        }
 
         function switchTab(tab) {
             document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-            
-            if (tab === 'login') {
-                document.querySelectorAll('.auth-tab')[0].classList.add('active');
-                document.getElementById('loginForm').classList.add('active');
-            } else {
-                document.querySelectorAll('.auth-tab')[1].classList.add('active');
-                document.getElementById('registerForm').classList.add('active');
-            }
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
             clearMessages();
         }
 
@@ -113,25 +99,27 @@
             const password = document.getElementById('loginPassword').value;
 
             try {
-                // Look up email from device ID
-                const snapshot = await db.ref('devices/' + deviceId + '/email').once('value');
-                const email = snapshot.val();
-                
-                if (!email) {
-                    showError('Device ID not found. Register first!');
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId, password })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showError(data.detail || 'Login failed');
                     btn.disabled = false;
                     btn.textContent = '🔑 Login to Dashboard';
                     return;
                 }
 
-                // Login with Firebase Auth
-                await auth.signInWithEmailAndPassword(email, password);
-                
-                // Store device ID for dashboard
-                localStorage.setItem('deviceId', deviceId);
-                window.location.href = 'dashboard.html';
+                setToken(data.token);
+                setDeviceId(data.device_id);
+                localStorage.setItem('hc_name', data.name);
+                localStorage.setItem('hc_is_admin', data.is_admin ? '1' : '0');
+                window.location.href = '/cloud/dashboard.html';
             } catch (err) {
-                showError(err.message.replace('Firebase: ', ''));
+                showError('Cannot connect to server. Is it running?');
                 btn.disabled = false;
                 btn.textContent = '🔑 Login to Dashboard';
             }
@@ -151,60 +139,33 @@
             const numSwitches = parseInt(document.getElementById('regSwitches').value) || 4;
 
             try {
-                // Check if device ID already exists
-                const existing = await db.ref('devices/' + deviceId).once('value');
-                if (existing.exists()) {
-                    showError('Device ID "' + deviceId + '" already exists! Choose a different one.');
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, device_id: deviceId, email, password, num_switches: numSwitches })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showError(data.detail || 'Registration failed');
                     btn.disabled = false;
                     btn.textContent = '📱 Register New Device';
                     return;
                 }
 
-                // Create Firebase Auth account
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const uid = userCredential.user.uid;
-
-                // Create device entry in database
-                const relays = {};
-                const switchNames = ['Living Room', 'Bedroom', 'Kitchen', 'Fan', 'Switch 5', 'Switch 6', 'Switch 7', 'Switch 8'];
-                for (let i = 1; i <= numSwitches; i++) {
-                    relays['relay' + i] = {
-                        state: false,
-                        name: switchNames[i-1] || 'Switch ' + i
-                    };
-                }
-
-                await db.ref('devices/' + deviceId).set({
-                    owner: uid,
-                    ownerName: name,
-                    email: email,
-                    deviceId: deviceId,
-                    numSwitches: numSwitches,
-                    relays: relays,
-                    online: false,
-                    lastSeen: Date.now(),
-                    createdAt: Date.now()
-                });
-
-                // Map user to device
-                await db.ref('users/' + uid).set({
-                    name: name,
-                    email: email,
-                    deviceId: deviceId
-                });
-
-                localStorage.setItem('deviceId', deviceId);
+                setToken(data.token);
+                setDeviceId(data.device_id);
+                localStorage.setItem('hc_name', name);
+                localStorage.setItem('hc_is_admin', '0');
                 showSuccess('✅ Device registered! Device ID: ' + deviceId + '. Redirecting...');
-                
-                setTimeout(() => {
-                    window.location.href = 'dashboard.html';
-                }, 1500);
+                setTimeout(() => { window.location.href = '/cloud/dashboard.html'; }, 1500);
             } catch (err) {
-                showError(err.message.replace('Firebase: ', ''));
+                showError('Cannot connect to server. Is it running?');
                 btn.disabled = false;
                 btn.textContent = '📱 Register New Device';
             }
         }
     </script>
 </body>
+
 </html>

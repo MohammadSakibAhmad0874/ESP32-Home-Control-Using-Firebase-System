@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeControl — Admin Panel</title>
+    <meta name="description" content="Admin panel: monitor and control all registered devices.">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .search-bar {
+            width: 100%;
+            max-width: 340px;
+            padding: 9px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-1);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .search-bar:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .search-bar::placeholder {
+            color: var(--text-3);
+        }
+
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .device-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .device-id-badge {
+            font-family: monospace;
+            background: rgba(109, 93, 252, 0.12);
+            border: 1px solid rgba(109, 93, 252, 0.3);
+            color: var(--accent-2);
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .confirm-delete {
+            display: none;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .scroll-top {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--accent);
+            border: none;
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px var(--accent-glow);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            transition: var(--transition);
+            z-index: 50;
+        }
+
+        .scroll-top.visible {
+            display: flex;
+        }
+
+        .scroll-top:hover {
+            transform: translateY(-2px);
+        }
+
+        .admin-panel-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            background: linear-gradient(135deg, rgba(109, 93, 252, .25), rgba(155, 139, 255, .15));
+            border: 1px solid rgba(109, 93, 252, .35);
+            color: var(--accent-2);
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+        }
+
+        .stat-card.green .stat-value {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card.red .stat-value {
+            background: linear-gradient(135deg, #ef4444, #f87171);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="nav-brand">
+                <span>🏠</span> HomeControl
+                <span class="admin-panel-badge">Admin</span>
+            </div>
+            <div class="nav-right">
+                <div class="nav-user">Hey, <strong id="navName">—</strong></div>
+                <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Admin Panel</h1>
+            <p>Monitor and control all registered devices</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">—</div>
+                <div class="stat-label">Total Devices</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-value" id="statOnline">—</div>
+                <div class="stat-label">Online</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-value" id="statOffline">—</div>
+                <div class="stat-label">Offline</div>
+            </div>
+        </div>
+
+        <!-- Filter Row -->
+        <div class="filter-row">
+            <input type="text" class="search-bar" id="searchInput" placeholder="🔍  Search by device ID or owner…"
+                oninput="renderDevices()">
+            <button class="btn btn-ghost btn-sm" onclick="loadDevices()">⟳ Refresh</button>
+            <button class="btn btn-sm"
+                style="background:rgba(109,93,252,.15);border:1px solid rgba(109,93,252,.35);color:var(--accent-2);border-radius:6px;font-size:13px"
+                onclick="makeAdmin()">👑 Make Me Admin</button>
+        </div>
+
+        <!-- Alert -->
+        <div class="alert" id="alertBox"></div>
+
+        <!-- Loading -->
+        <div id="loadingState" style="text-align:center;padding:40px">
+            <div class="spinner"></div>
+            <p style="color:var(--text-2);margin-top:12px;font-size:14px">Loading devices…</p>
+        </div>
+
+        <!-- Device List -->
+        <div class="devices-list" id="devicesList" style="display:none"></div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display:none">
+            <div class="empty-icon">📭</div>
+            <h3>No devices found</h3>
+            <p>Registered devices will appear here.</p>
+        </div>
+    </div>
+
+    <!-- Scroll to top button -->
+    <button class="scroll-top" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+    <script src="app.js"></script>
+    <script>
+        requireAuth();
+        // Allow admin panel access even if not admin yet (via make-admin)
+
+        document.getElementById('navName').textContent = getName();
+
+        let allDevices = [];
+
+        /* ── Load all devices ────────────────────────────────────────── */
+
+        async function loadDevices() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('devicesList').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            hideAlert(document.getElementById('alertBox'));
+
+            try {
+                allDevices = await apiGet('/api/admin/devices');
+                updateStats();
+                renderDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), `${err.message}. Make sure you are an admin (click "👑 Make Me Admin").`, 'error');
+            } finally {
+                document.getElementById('loadingState').style.display = 'none';
+            }
+        }
+
+        function updateStats() {
+            const online = allDevices.filter(d => d.online).length;
+            document.getElementById('statTotal').textContent = allDevices.length;
+            document.getElementById('statOnline').textContent = online;
+            document.getElementById('statOffline').textContent = allDevices.length - online;
+        }
+
+        /* ── Render ──────────────────────────────────────────────────── */
+
+        function renderDevices() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allDevices.filter(d =>
+                d.device_id.toLowerCase().includes(query) ||
+                d.owner_name.toLowerCase().includes(query) ||
+                (d.email || '').toLowerCase().includes(query)
+            );
+
+            const list = document.getElementById('devicesList');
+            list.innerHTML = '';
+
+            if (!filtered.length) {
+                document.getElementById('emptyState').style.display = 'block';
+                list.style.display = 'none';
+                return;
+            }
+
+            document.getElementById('emptyState').style.display = 'none';
+            list.style.display = 'flex';
+
+            filtered.sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+
+            filtered.forEach(device => {
+                const card = document.createElement('div');
+                card.className = 'admin-device-card';
+                card.id = `device-${device.device_id}`;
+
+                const relayKeys = Object.keys(device.relays || {}).sort();
+                const relayHtml = relayKeys.map(key => {
+                    const r = device.relays[key];
+                    return `<span class="mini-relay ${r.state ? 'on' : ''}"
+            onclick="adminToggle('${device.device_id}', '${key}', ${!r.state})"
+            id="mini-${device.device_id}-${key}"
+            title="Click to toggle">
+            <span class="mini-dot"></span>
+            ${relayIcon(r.name)} ${r.name}
+          </span>`;
+                }).join('');
+
+                card.innerHTML = `
+          <div class="admin-device-header">
+            <div class="admin-device-title">
+              <div>
+                <div class="device-meta">
+                  <span class="device-id-badge">${device.device_id}</span>
+                  <span id="status-${device.device_id}" class="badge ${device.online ? 'badge-online' : 'badge-offline'}">
+                    <span class="dot"></span> ${device.online ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                <p>${device.owner_name} &middot; ${device.email || '—'} &middot;
+                   IP: ${device.ip_address || '—'} &middot;
+                   Last: ${timeAgo(device.last_seen)}</p>
+              </div>
+            </div>
+            <div class="admin-device-actions">
+              <button class="btn btn-danger" onclick="startDeleteConfirm('${device.device_id}')">🗑 Delete</button>
+              <div class="confirm-delete" id="confirm-${device.device_id}">
+                <span style="font-size:12px;color:var(--red)">Sure?</span>
+                <button class="btn btn-danger btn-sm" onclick="deleteDevice('${device.device_id}')">Yes</button>
+                <button class="btn btn-ghost btn-sm" onclick="cancelDelete('${device.device_id}')">No</button>
+              </div>
+            </div>
+          </div>
+          <div class="admin-relays-row" id="relays-${device.device_id}">
+            ${relayHtml || '<span style="color:var(--text-3);font-size:13px">No relays</span>'}
+          </div>
+        `;
+                list.appendChild(card);
+            });
+        }
+
+        /* ── Admin quick-toggle relay ────────────────────────────────── */
+
+        async function adminToggle(deviceId, relayKey, newState) {
+            const el = document.getElementById(`mini-${deviceId}-${relayKey}`);
+            if (!el) return;
+            // Optimistic
+            el.classList.toggle('on', newState);
+            el.querySelector('.mini-dot').className = 'mini-dot';
+
+            try {
+                await toggleRelay(deviceId, relayKey, newState);
+                // Update local allDevices
+                const dev = allDevices.find(d => d.device_id === deviceId);
+                if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = newState;
+                el.classList.toggle('on', newState);
+            } catch {
+                // Revert
+                el.classList.toggle('on', !newState);
+            }
+        }
+
+        /* ── Delete device ───────────────────────────────────────────── */
+
+        function startDeleteConfirm(deviceId) {
+            document.getElementById(`confirm-${deviceId}`).style.display = 'flex';
+        }
+
+        function cancelDelete(deviceId) {
+            document.getElementById(`confirm-${deviceId}`).style.display = 'none';
+        }
+
+        async function deleteDevice(deviceId) {
+            try {
+                await apiDelete(`/api/admin/devices/${deviceId}`);
+                allDevices = allDevices.filter(d => d.device_id !== deviceId);
+                updateStats();
+                renderDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), err.message, 'error');
+            }
+        }
+
+        /* ── Make admin ──────────────────────────────────────────────── */
+
+        async function makeAdmin() {
+            try {
+                const res = await apiPost('/api/admin/make-admin', {});
+                localStorage.setItem('hc_is_admin', '1');
+                showAlert(document.getElementById('alertBox'), `✅ ${res.message}`, 'success');
+                loadDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), err.message, 'error');
+            }
+        }
+
+        /* ── Scroll-to-top button ────────────────────────────────────── */
+
+        window.addEventListener('scroll', () => {
+            document.getElementById('scrollTopBtn').classList.toggle('visible', window.scrollY > 300);
+        });
+
+        loadDevices();
+    </script>
+</body>
+
+</html>

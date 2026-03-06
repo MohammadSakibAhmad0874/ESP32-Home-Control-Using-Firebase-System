@@ -1,0 +1,48 @@
+services:
+  # ── PostgreSQL Database ────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: homecontrol-db
+    restart: always
+    environment:
+      POSTGRES_USER: homecontrol
+      POSTGRES_PASSWORD: homecontrol123
+      POSTGRES_DB: homecontrol
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U homecontrol" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: homecontrol-backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://homecontrol:homecontrol123@db:5432/homecontrol
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  # ── Nginx Gateway ──────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: homecontrol-nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web:/usr/share/nginx/html/web:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
