@@ -33,7 +33,22 @@ async def get_db():
 
 
 async def init_db():
-    """Create all tables on startup."""
+    """
+    Create all tables on startup and run safe schema migrations.
+    Uses CREATE TABLE IF NOT EXISTS (via create_all) and ALTER TABLE ... IF NOT EXISTS
+    so it is safe to run on every startup against an existing database.
+    """
     async with engine.begin() as conn:
-        from models import User, Device, Relay  # noqa: F401
+        # Import all models so SQLAlchemy is aware of them
+        from models import User, Device, Relay, Schedule, PowerLog  # noqa: F401
+        # Create any missing tables (idempotent — won't touch existing tables)
         await conn.run_sync(Base.metadata.create_all)
+
+        # ── Safe column migrations for existing tables ────────────────────────
+        # Add wattage column to relays table if it doesn't exist yet
+        # (needed when upgrading from v2.0.0 → v2.1.0)
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE relays ADD COLUMN IF NOT EXISTS wattage FLOAT DEFAULT 60.0"
+            )
+        )
