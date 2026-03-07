@@ -1,13 +1,15 @@
 """
 HomeControl — Self-Hosted Backend
-FastAPI app with JWT auth, PostgreSQL, and WebSocket real-time sync for ESP32.
+FastAPI app with JWT auth, PostgreSQL, WebSocket real-time sync for ESP32,
+Smart Schedules, and Power Usage tracking.
 """
 import asyncio
 import json
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Dict, Optional
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
 
 from fastapi import (
     Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect,
@@ -24,8 +26,8 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from auth import create_access_token, hash_password, verify_password, decode_token
-from database import get_db, init_db
-from models import Device, Relay, User
+from database import get_db, init_db, AsyncSessionLocal
+from models import Device, Relay, User, Schedule, PowerLog
 
 # ── WebSocket connection manager ─────────────────────────────────────────────
 
@@ -81,14 +83,114 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# ── Schedule Executor Background Task ────────────────────────────────────────
+
+# Track already-fired schedules this minute to avoid double-firing
+_fired_this_minute: set = set()
+
+DAY_MAP = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+
+
+async def schedule_executor():
+    """
+    Runs every 30 seconds. Checks all enabled schedules and fires relay
+    commands if the current time matches. Uses a 'fired this minute' set
+    to avoid double-triggering.
+    """
+    last_minute = ""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            now = datetime.now()
+            current_time = now.strftime("%H:%M")
+            current_day = DAY_MAP[now.weekday()]
+
+            # Reset fired set at the top of a new minute
+            if current_time != last_minute:
+                _fired_this_minute.clear()
+                last_minute = current_time
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Schedule).where(Schedule.enabled == True)  # noqa: E712
+                )
+                schedules = result.scalars().all()
+
+                for sched in schedules:
+                    # Check time match
+                    if sched.time != current_time:
+                        continue
+
+                    # Check day match
+                    days_list = [d.strip() for d in sched.days.split(",")]
+                    if "all" not in days_list and current_day not in days_list:
+                        continue
+
+                    # Avoid double-firing in the same minute
+                    fire_key = f"{sched.id}:{current_time}"
+                    if fire_key in _fired_this_minute:
+                        continue
+                    _fired_this_minute.add(fire_key)
+
+                    # Fire the relay
+                    new_state = (sched.action == "on")
+                    device_id = sched.device_id
+                    relay_key = sched.relay_key
+
+                    # Update DB
+                    relay_result = await db.execute(
+                        select(Relay).where(
+                            Relay.device_id == device_id,
+                            Relay.relay_key == relay_key
+                        )
+                    )
+                    relay = relay_result.scalar_one_or_none()
+                    if relay:
+                        old_state = relay.state
+                        relay.state = new_state
+
+                        # Log power change
+                        db.add(PowerLog(
+                            device_id=device_id,
+                            relay_key=relay_key,
+                            state=new_state,
+                            timestamp=int(time.time()),
+                        ))
+                        await db.commit()
+
+                    # Push to ESP32 over WebSocket
+                    await manager.send_to_esp(device_id, {
+                        "type": "relay_cmd",
+                        relay_key: new_state
+                    })
+
+                    # Push to dashboards
+                    await manager.broadcast_to_dashboards(device_id, {
+                        "type": "relay_update",
+                        "relay_key": relay_key,
+                        "state": new_state,
+                        "source": f"schedule:{sched.label or sched.id[:8]}"
+                    })
+
+        except Exception as e:
+            print(f"[ScheduleExecutor] Error: {e}")
+
+
 # ── App lifecycle ─────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Start the background schedule executor
+    task = asyncio.create_task(schedule_executor())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
-app = FastAPI(title="HomeControl API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="HomeControl API", version="2.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -144,6 +246,25 @@ class RelayToggleRequest(BaseModel):
 class RelayRenameRequest(BaseModel):
     name: str
 
+class WattageUpdateRequest(BaseModel):
+    wattage: float  # Watts
+
+class ScheduleCreateRequest(BaseModel):
+    relay_key: str
+    action: str      # "on" or "off"
+    time: str        # "HH:MM"
+    days: str        # "Mon,Tue" or "all"
+    enabled: bool = True
+    label: str = ""
+
+class ScheduleUpdateRequest(BaseModel):
+    relay_key: Optional[str] = None
+    action: Optional[str] = None
+    time: Optional[str] = None
+    days: Optional[str] = None
+    enabled: Optional[bool] = None
+    label: Optional[str] = None
+
 # ── Auth endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/register")
@@ -187,7 +308,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         name = (req.switch_names[i - 1] if i <= len(req.switch_names)
                 else default_names[i - 1] if i <= len(default_names)
                 else f"Switch {i}")
-        db.add(Relay(device_id=device_id, relay_key=key, name=name, state=False))
+        db.add(Relay(device_id=device_id, relay_key=key, name=name, state=False, wattage=60.0))
 
     # Create user
     user = User(
@@ -278,7 +399,18 @@ async def toggle_relay(
     if not relay:
         raise HTTPException(404, "Relay not found")
 
+    old_state = relay.state
     relay.state = req.state
+
+    # Log the power state change (for usage tracking)
+    if old_state != req.state:
+        db.add(PowerLog(
+            device_id=device_id,
+            relay_key=relay_key,
+            state=req.state,
+            timestamp=int(time.time()),
+        ))
+
     await db.commit()
 
     # Push to ESP32 over WebSocket
@@ -319,6 +451,277 @@ async def rename_relay(
     relay.name = req.name
     await db.commit()
     return {"success": True}
+
+
+@app.put("/api/devices/{device_id}/relay/{relay_key}/wattage")
+async def update_wattage(
+    device_id: str,
+    relay_key: str,
+    req: WattageUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the wattage for a relay (used in power usage estimation)."""
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(Relay).where(Relay.device_id == device_id, Relay.relay_key == relay_key)
+    )
+    relay = result.scalar_one_or_none()
+    if not relay:
+        raise HTTPException(404, "Relay not found")
+
+    relay.wattage = max(1.0, min(req.wattage, 10000.0))  # clamp 1W–10kW
+    await db.commit()
+    return {"success": True, "wattage": relay.wattage}
+
+# ── Schedule endpoints ────────────────────────────────────────────────────────
+
+@app.get("/api/devices/{device_id}/schedules")
+async def get_schedules(
+    device_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(Schedule).where(Schedule.device_id == device_id)
+        .order_by(Schedule.created_at)
+    )
+    schedules = result.scalars().all()
+    return [_schedule_to_dict(s) for s in schedules]
+
+
+@app.post("/api/devices/{device_id}/schedules")
+async def create_schedule(
+    device_id: str,
+    req: ScheduleCreateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    # Validate action
+    if req.action not in ("on", "off"):
+        raise HTTPException(400, "action must be 'on' or 'off'")
+
+    # Validate time format HH:MM
+    try:
+        h, m = req.time.split(":")
+        assert 0 <= int(h) <= 23 and 0 <= int(m) <= 59
+    except Exception:
+        raise HTTPException(400, "time must be in HH:MM format (24h)")
+
+    sched = Schedule(
+        id=str(uuid.uuid4()),
+        device_id=device_id,
+        relay_key=req.relay_key,
+        action=req.action,
+        time=req.time,
+        days=req.days,
+        enabled=req.enabled,
+        label=req.label,
+        created_at=int(time.time()),
+    )
+    db.add(sched)
+    await db.commit()
+    return _schedule_to_dict(sched)
+
+
+@app.put("/api/devices/{device_id}/schedules/{schedule_id}")
+async def update_schedule(
+    device_id: str,
+    schedule_id: str,
+    req: ScheduleUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(Schedule).where(Schedule.id == schedule_id, Schedule.device_id == device_id)
+    )
+    sched = result.scalar_one_or_none()
+    if not sched:
+        raise HTTPException(404, "Schedule not found")
+
+    if req.relay_key is not None:
+        sched.relay_key = req.relay_key
+    if req.action is not None:
+        if req.action not in ("on", "off"):
+            raise HTTPException(400, "action must be 'on' or 'off'")
+        sched.action = req.action
+    if req.time is not None:
+        sched.time = req.time
+    if req.days is not None:
+        sched.days = req.days
+    if req.enabled is not None:
+        sched.enabled = req.enabled
+    if req.label is not None:
+        sched.label = req.label
+
+    await db.commit()
+    return _schedule_to_dict(sched)
+
+
+@app.delete("/api/devices/{device_id}/schedules/{schedule_id}")
+async def delete_schedule(
+    device_id: str,
+    schedule_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    result = await db.execute(
+        select(Schedule).where(Schedule.id == schedule_id, Schedule.device_id == device_id)
+    )
+    sched = result.scalar_one_or_none()
+    if not sched:
+        raise HTTPException(404, "Schedule not found")
+
+    await db.delete(sched)
+    await db.commit()
+    return {"success": True}
+
+# ── Power Usage endpoints ─────────────────────────────────────────────────────
+
+@app.get("/api/devices/{device_id}/power")
+async def get_power_usage(
+    device_id: str,
+    days: int = Query(default=7, ge=1, le=30),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns per-relay power usage for the last N days.
+    Calculates kWh using ON-time intervals from PowerLog, wattage from Relay.
+    Also returns estimated cost at ₹8/kWh (Indian average rate).
+    """
+    device_id = device_id.upper()
+    if not user.is_admin and user.device_id != device_id:
+        raise HTTPException(403, "Access denied")
+
+    # Get relay info (names, wattages)
+    relay_result = await db.execute(
+        select(Relay).where(Relay.device_id == device_id)
+    )
+    relays = {r.relay_key: r for r in relay_result.scalars().all()}
+
+    # Get power logs for last N days
+    since_ts = int(time.time()) - (days * 86400)
+    log_result = await db.execute(
+        select(PowerLog)
+        .where(PowerLog.device_id == device_id, PowerLog.timestamp >= since_ts)
+        .order_by(PowerLog.relay_key, PowerLog.timestamp)
+    )
+    logs = log_result.scalars().all()
+
+    # Group logs by relay_key
+    logs_by_relay: Dict[str, list] = {}
+    for log in logs:
+        logs_by_relay.setdefault(log.relay_key, []).append(log)
+
+    now_ts = int(time.time())
+    RATE_PER_KWH = 8.0  # ₹ per kWh (Indian average)
+
+    result_data = {}
+    total_kwh = 0.0
+    total_cost = 0.0
+
+    for relay_key, relay in relays.items():
+        relay_logs = logs_by_relay.get(relay_key, [])
+        wattage = relay.wattage or 60.0
+
+        # Calculate ON-time in seconds
+        on_seconds = 0.0
+        on_start = None
+
+        # If relay is currently ON, pretend there's a synthetic log at `since_ts`
+        for log in relay_logs:
+            if log.state:  # Turned ON
+                on_start = log.timestamp
+            else:  # Turned OFF
+                if on_start is not None:
+                    on_seconds += log.timestamp - on_start
+                    on_start = None
+
+        # If still ON at end of window
+        if on_start is not None:
+            on_seconds += now_ts - on_start
+
+        hours_on = on_seconds / 3600.0
+        kwh = (wattage * hours_on) / 1000.0
+        cost = kwh * RATE_PER_KWH
+        total_kwh += kwh
+        total_cost += cost
+
+        result_data[relay_key] = {
+            "name": relay.name,
+            "wattage": wattage,
+            "hours_on": round(hours_on, 2),
+            "kwh": round(kwh, 3),
+            "cost_inr": round(cost, 2),
+        }
+
+    # Build daily breakdown (last 7 days) for chart
+    import math
+    daily_breakdown = []
+    for day_offset in range(days - 1, -1, -1):
+        day_start = int(time.time()) - (day_offset + 1) * 86400
+        day_end = day_start + 86400
+        day_label = datetime.fromtimestamp(day_start).strftime("%b %d")
+
+        day_kwh_by_relay = {}
+        for relay_key, relay in relays.items():
+            relay_logs = logs_by_relay.get(relay_key, [])
+            wattage = relay.wattage or 60.0
+            on_seconds = 0.0
+            on_start_day = None
+
+            for log in relay_logs:
+                if log.timestamp < day_start or log.timestamp > day_end:
+                    continue
+                if log.state:
+                    on_start_day = log.timestamp
+                else:
+                    if on_start_day is not None:
+                        on_seconds += log.timestamp - on_start_day
+                        on_start_day = None
+
+            if on_start_day is not None:
+                on_seconds += min(day_end, now_ts) - on_start_day
+
+            hours_on = on_seconds / 3600.0
+            kwh = (wattage * hours_on) / 1000.0
+            day_kwh_by_relay[relay_key] = round(kwh, 3)
+
+        daily_breakdown.append({
+            "date": day_label,
+            "relays": day_kwh_by_relay,
+            "total_kwh": round(sum(day_kwh_by_relay.values()), 3),
+        })
+
+    return {
+        "device_id": device_id,
+        "period_days": days,
+        "relays": result_data,
+        "daily_breakdown": daily_breakdown,
+        "total_kwh": round(total_kwh, 3),
+        "total_cost_inr": round(total_cost, 2),
+        "rate_per_kwh_inr": RATE_PER_KWH,
+    }
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
@@ -383,8 +786,6 @@ async def esp_websocket(
     The ESP32 connects here and receives relay commands in real-time.
     It also sends heartbeats and state updates back.
     """
-    # Validate device token (simple shared secret check: token must equal device_id for now,
-    # or you can use JWT — using JWT here for proper auth)
     payload = decode_token(token)
     if not payload:
         await websocket.close(code=1008)
@@ -420,6 +821,7 @@ async def esp_websocket(
             elif msg_type == "state_update":
                 # ESP32 reports its local state (after a physical button press)
                 states = data.get("states", {})
+                await _log_relay_state_changes(db, device_id, states)
                 await _update_relay_states(db, device_id, states)
                 await manager.broadcast_to_dashboards(device_id, {
                     "type": "full_update",
@@ -483,7 +885,7 @@ async def dashboard_websocket(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0", "mode": "self-hosted"}
+    return {"status": "ok", "version": "2.1.0", "mode": "self-hosted", "features": ["schedules", "power-usage"]}
 
 # ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -498,9 +900,23 @@ def _device_to_dict(device: Device) -> dict:
         "ip_address": device.ip_address,
         "created_at": device.created_at,
         "relays": {
-            r.relay_key: {"name": r.name, "state": r.state}
+            r.relay_key: {"name": r.name, "state": r.state, "wattage": r.wattage}
             for r in sorted(device.relays, key=lambda x: x.relay_key)
         },
+    }
+
+
+def _schedule_to_dict(sched: Schedule) -> dict:
+    return {
+        "id": sched.id,
+        "device_id": sched.device_id,
+        "relay_key": sched.relay_key,
+        "action": sched.action,
+        "time": sched.time,
+        "days": sched.days,
+        "enabled": sched.enabled,
+        "label": sched.label,
+        "created_at": sched.created_at,
     }
 
 
@@ -533,6 +949,24 @@ async def _update_relay_states(db: AsyncSession, device_id: str, states: dict):
     for relay in relays:
         if relay.relay_key in states:
             relay.state = bool(states[relay.relay_key])
+    await db.commit()
+
+
+async def _log_relay_state_changes(db: AsyncSession, device_id: str, states: dict):
+    """Log ESP32-reported state changes into PowerLog for energy tracking."""
+    result = await db.execute(select(Relay).where(Relay.device_id == device_id))
+    relays = result.scalars().all()
+    now = int(time.time())
+    for relay in relays:
+        if relay.relay_key in states:
+            new_state = bool(states[relay.relay_key])
+            if relay.state != new_state:
+                db.add(PowerLog(
+                    device_id=device_id,
+                    relay_key=relay.relay_key,
+                    state=new_state,
+                    timestamp=now,
+                ))
     await db.commit()
 
 
