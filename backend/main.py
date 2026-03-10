@@ -1262,9 +1262,24 @@ async def _log_relay_state_changes(db: AsyncSession, device_id: str, states: dic
 # ── Static Web UI ─────────────────────────────────────────────────────────────
 # Serve the /web directory so the frontend is accessible from the same origin.
 # This must come AFTER all API routes to avoid catching /api/* paths.
+#
+# Path resolution (works for both Railway Docker and local dev):
+#   Railway: web/ is copied alongside main.py → /app/web
+#   Local:   web/ is a sibling of backend/ → ../web
 
-_WEB_DIR = os.path.join(os.path.dirname(__file__), "..", "web")
-_WEB_DIR = os.path.abspath(_WEB_DIR)
+_here = os.path.dirname(os.path.abspath(__file__))
+
+# Try sibling web/ first (Railway Docker layout: COPY web/ ./web/)
+_WEB_DIR_SIBLING = os.path.join(_here, "web")
+# Fall back to parent/../web (local dev: backend/ next to web/)
+_WEB_DIR_PARENT  = os.path.join(_here, "..", "web")
+
+if os.path.isdir(_WEB_DIR_SIBLING):
+    _WEB_DIR = _WEB_DIR_SIBLING
+else:
+    _WEB_DIR = os.path.abspath(_WEB_DIR_PARENT)
+
+print(f"[Static] Serving web UI from: {_WEB_DIR} (exists={os.path.isdir(_WEB_DIR)})")
 
 if os.path.isdir(_WEB_DIR):
     @app.get("/", include_in_schema=False)
