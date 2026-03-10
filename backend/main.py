@@ -610,6 +610,35 @@ async def admin_login(req: AdminLoginRequest, db: AsyncSession = Depends(get_db)
     }
 
 
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+    admin_secret: str
+
+
+@app.post("/api/auth/reset-admin-password")
+async def reset_admin_password(req: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Temporary admin password reset via ADMIN_SECRET.
+    Requires the ADMIN_SECRET env var to be set and matched.
+    Only works for admin users.
+    """
+    admin_secret_env = os.environ.get("ADMIN_SECRET", "")
+    if not admin_secret_env or req.admin_secret != admin_secret_env:
+        raise HTTPException(403, "Invalid or missing admin secret")
+
+    result = await db.execute(select(User).where(User.email == req.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "User with that email not found")
+    if not user.is_admin:
+        raise HTTPException(403, "That user is not an admin")
+
+    user.hashed_password = hash_password(req.new_password)
+    await db.commit()
+    return {"success": True, "message": f"Password reset for {user.name} ({user.email})"}
+
+
 @app.get("/api/auth/me")
 async def me(user: User = Depends(get_current_user)):
     return {
