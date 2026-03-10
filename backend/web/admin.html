@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeControl — Admin Panel</title>
+    <meta name="description" content="Admin panel: monitor and control all registered devices.">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .search-bar {
+            width: 100%;
+            max-width: 340px;
+            padding: 9px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-1);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .search-bar:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .search-bar::placeholder {
+            color: var(--text-3);
+        }
+
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .device-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .device-id-badge {
+            font-family: monospace;
+            background: rgba(109, 93, 252, 0.12);
+            border: 1px solid rgba(109, 93, 252, 0.3);
+            color: var(--accent-2);
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .confirm-delete {
+            display: none;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .scroll-top {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--accent);
+            border: none;
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px var(--accent-glow);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            transition: var(--transition);
+            z-index: 50;
+        }
+
+        .scroll-top.visible {
+            display: flex;
+        }
+
+        .scroll-top:hover {
+            transform: translateY(-2px);
+        }
+
+        .admin-panel-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            background: linear-gradient(135deg, rgba(109, 93, 252, .25), rgba(155, 139, 255, .15));
+            border: 1px solid rgba(109, 93, 252, .35);
+            color: var(--accent-2);
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+        }
+
+        .stat-card.green .stat-value {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card.red .stat-value {
+            background: linear-gradient(135deg, #ef4444, #f87171);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Pre-registration panel */
+        .pre-reg-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px 24px;
+            margin-bottom: 28px;
+        }
+
+        .pre-reg-panel h3 {
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 14px;
+            color: var(--text-1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pre-reg-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+
+        .pre-reg-table th {
+            color: var(--text-3);
+            font-weight: 500;
+            text-align: left;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pre-reg-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-2);
+        }
+
+        .pre-reg-table td:first-child {
+            font-family: monospace;
+            font-weight: 700;
+            color: var(--accent-2);
+        }
+
+        .badge-claimed {
+            background: rgba(34, 197, 94, .15);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, .3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-unclaimed {
+            background: rgba(100, 116, 139, .15);
+            color: #94a3b8;
+            border: 1px solid rgba(100, 116, 139, .3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .seed-form {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .seed-form input {
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, .3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-1);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .seed-form input:focus {
+            border-color: var(--border-focus);
+        }
+
+        .seed-form input::placeholder {
+            color: var(--text-3);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="nav-brand">
+                <span>🏠</span> HomeControl
+                <span class="admin-panel-badge">Admin</span>
+            </div>
+            <div class="nav-right">
+                <div class="nav-user">Hey, <strong id="navName">—</strong></div>
+                <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>Admin Panel</h1>
+            <p>Monitor and control all registered devices</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">—</div>
+                <div class="stat-label">Total Devices</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-value" id="statOnline">—</div>
+                <div class="stat-label">Online</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-value" id="statOffline">—</div>
+                <div class="stat-label">Offline</div>
+            </div>
+        </div>
+
+        <!-- Pre-Registration Management Panel -->
+        <div class="pre-reg-panel">
+            <h3>🔑 Pre-Registered Devices</h3>
+            <div id="preRegLoading" style="color:var(--text-3);font-size:13px">Loading…</div>
+            <table class="pre-reg-table" id="preRegTable" style="display:none">
+                <thead>
+                    <tr>
+                        <th>Device ID</th>
+                        <th>Label</th>
+                        <th>Switches</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="preRegTableBody"></tbody>
+            </table>
+            <!-- Add new device ID form -->
+            <p
+                style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+                Add New Device ID</p>
+            <div class="seed-form">
+                <input type="text" id="seedDeviceId" placeholder="Device ID (e.g. NEWDEV01)"
+                    style="text-transform:uppercase;width:180px">
+                <input type="text" id="seedLabel" placeholder="Label (e.g. John's Device)" style="width:180px">
+                <select id="seedNumSwitches"
+                    style="padding:8px 10px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:var(--text-1);font-size:13px">
+                    <option value="2">2 switches</option>
+                    <option value="4" selected>4 switches</option>
+                    <option value="6">6 switches</option>
+                    <option value="8">8 switches</option>
+                </select>
+                <button class="btn btn-sm" onclick="seedDevice()"
+                    style="background:rgba(109,93,252,.2);border:1px solid rgba(109,93,252,.4);color:var(--accent-2);padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer">
+                    + Register ID
+                </button>
+            </div>
+            <div id="seedAlert" style="margin-top:8px;font-size:13px"></div>
+        </div>
+
+        <!-- Filter Row -->
+        <div class="filter-row">
+            <input type="text" class="search-bar" id="searchInput" placeholder="🔍  Search by device ID or owner…"
+                oninput="renderDevices()">
+            <button class="btn btn-ghost btn-sm" onclick="loadDevices()">⟳ Refresh</button>
+            <button class="btn btn-sm"
+                style="background:rgba(109,93,252,.15);border:1px solid rgba(109,93,252,.35);color:var(--accent-2);border-radius:6px;font-size:13px"
+                onclick="makeAdmin()">👑 Make Me Admin</button>
+        </div>
+
+        <!-- Alert -->
+        <div class="alert" id="alertBox"></div>
+
+        <!-- Loading -->
+        <div id="loadingState" style="text-align:center;padding:40px">
+            <div class="spinner"></div>
+            <p style="color:var(--text-2);margin-top:12px;font-size:14px">Loading devices…</p>
+        </div>
+
+        <!-- Device List -->
+        <div class="devices-list" id="devicesList" style="display:none"></div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display:none">
+            <div class="empty-icon">📭</div>
+            <h3>No devices found</h3>
+            <p>Registered devices will appear here.</p>
+        </div>
+    </div>
+
+    <!-- Scroll to top button -->
+    <button class="scroll-top" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+    <script src="app.js"></script>
+    <script>
+        requireAuth();
+        // Allow admin panel access even if not admin yet (via make-admin)
+
+        document.getElementById('navName').textContent = getName();
+
+        let allDevices = [];
+
+        /* ── Load all devices ────────────────────────────────────────── */
+
+        async function loadDevices() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('devicesList').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'none';
+            hideAlert(document.getElementById('alertBox'));
+
+            try {
+                allDevices = await apiGet('/api/admin/devices');
+                updateStats();
+                renderDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), `${err.message}. Make sure you are an admin (click "👑 Make Me Admin").`, 'error');
+            } finally {
+                document.getElementById('loadingState').style.display = 'none';
+            }
+        }
+
+        function updateStats() {
+            const online = allDevices.filter(d => d.online).length;
+            document.getElementById('statTotal').textContent = allDevices.length;
+            document.getElementById('statOnline').textContent = online;
+            document.getElementById('statOffline').textContent = allDevices.length - online;
+        }
+
+        /* ── Render ──────────────────────────────────────────────────── */
+
+        function renderDevices() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allDevices.filter(d =>
+                d.device_id.toLowerCase().includes(query) ||
+                d.owner_name.toLowerCase().includes(query) ||
+                (d.email || '').toLowerCase().includes(query)
+            );
+
+            const list = document.getElementById('devicesList');
+            list.innerHTML = '';
+
+            if (!filtered.length) {
+                document.getElementById('emptyState').style.display = 'block';
+                list.style.display = 'none';
+                return;
+            }
+
+            document.getElementById('emptyState').style.display = 'none';
+            list.style.display = 'flex';
+
+            filtered.sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+
+            filtered.forEach(device => {
+                const card = document.createElement('div');
+                card.className = 'admin-device-card';
+                card.id = `device-${device.device_id}`;
+
+                const relayKeys = Object.keys(device.relays || {}).sort();
+                const relayHtml = relayKeys.map(key => {
+                    const r = device.relays[key];
+                    return `<span class="mini-relay ${r.state ? 'on' : ''}"
+            onclick="adminToggle('${device.device_id}', '${key}', ${!r.state})"
+            id="mini-${device.device_id}-${key}"
+            title="Click to toggle">
+            <span class="mini-dot"></span>
+            ${relayIcon(r.name)} ${r.name}
+          </span>`;
+                }).join('');
+
+                card.innerHTML = `
+          <div class="admin-device-header">
+            <div class="admin-device-title">
+              <div>
+                <div class="device-meta">
+                  <span class="device-id-badge">${device.device_id}</span>
+                  <span id="status-${device.device_id}" class="badge ${device.online ? 'badge-online' : 'badge-offline'}">
+                    <span class="dot"></span> ${device.online ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                <p>${device.owner_name} &middot; ${device.email || '—'} &middot;
+                   IP: ${device.ip_address || '—'} &middot;
+                   Last: ${timeAgo(device.last_seen)}</p>
+              </div>
+            </div>
+            <div class="admin-device-actions">
+              <button class="btn btn-danger" onclick="startDeleteConfirm('${device.device_id}')">🗑 Delete</button>
+              <div class="confirm-delete" id="confirm-${device.device_id}">
+                <span style="font-size:12px;color:var(--red)">Sure?</span>
+                <button class="btn btn-danger btn-sm" onclick="deleteDevice('${device.device_id}')">Yes</button>
+                <button class="btn btn-ghost btn-sm" onclick="cancelDelete('${device.device_id}')">No</button>
+              </div>
+            </div>
+          </div>
+          <div class="admin-relays-row" id="relays-${device.device_id}">
+            ${relayHtml || '<span style="color:var(--text-3);font-size:13px">No relays</span>'}
+          </div>
+        `;
+                list.appendChild(card);
+            });
+        }
+
+        /* ── Admin quick-toggle relay ────────────────────────────────── */
+
+        async function adminToggle(deviceId, relayKey, newState) {
+            const el = document.getElementById(`mini-${deviceId}-${relayKey}`);
+            if (!el) return;
+            // Optimistic
+            el.classList.toggle('on', newState);
+            el.querySelector('.mini-dot').className = 'mini-dot';
+
+            try {
+                await toggleRelay(deviceId, relayKey, newState);
+                // Update local allDevices
+                const dev = allDevices.find(d => d.device_id === deviceId);
+                if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = newState;
+                el.classList.toggle('on', newState);
+            } catch {
+                // Revert
+                el.classList.toggle('on', !newState);
+            }
+        }
+
+        /* ── Delete device ───────────────────────────────────────────── */
+
+        function startDeleteConfirm(deviceId) {
+            document.getElementById(`confirm-${deviceId}`).style.display = 'flex';
+        }
+
+        function cancelDelete(deviceId) {
+            document.getElementById(`confirm-${deviceId}`).style.display = 'none';
+        }
+
+        async function deleteDevice(deviceId) {
+            try {
+                await apiDelete(`/api/admin/devices/${deviceId}`);
+                allDevices = allDevices.filter(d => d.device_id !== deviceId);
+                updateStats();
+                renderDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), err.message, 'error');
+            }
+        }
+
+        /* ── Make admin ──────────────────────────────────────────────── */
+
+        async function makeAdmin() {
+            try {
+                const res = await apiPost('/api/admin/make-admin', {});
+                localStorage.setItem('hc_is_admin', '1');
+                showAlert(document.getElementById('alertBox'), `✅ ${res.message}`, 'success');
+                loadDevices();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), err.message, 'error');
+            }
+        }
+
+        /* ── Pre-Registered Devices ────────────────────────────────── */
+
+        let allPreRegistered = [];
+
+        async function loadPreRegistered() {
+            try {
+                allPreRegistered = await apiGet('/api/admin/pre-registered');
+                renderPreRegistered();
+            } catch (err) {
+                document.getElementById('preRegLoading').textContent = 'Could not load (need admin access).';
+            }
+        }
+
+        function renderPreRegistered() {
+            const tbody = document.getElementById('preRegTableBody');
+            tbody.innerHTML = '';
+            document.getElementById('preRegLoading').style.display = 'none';
+            document.getElementById('preRegTable').style.display = 'table';
+
+            if (!allPreRegistered.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-3);text-align:center;padding:20px">No pre-registered devices yet.</td></tr>';
+                return;
+            }
+
+            allPreRegistered.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${d.device_id}</td>
+                    <td>${d.label || '—'}</td>
+                    <td>${d.num_switches}</td>
+                    <td>${d.is_claimed
+                        ? '<span class="badge-claimed">✅ Claimed</span>'
+                        : '<span class="badge-unclaimed">⏳ Unclaimed</span>'}
+                    </td>
+                    <td>${d.is_claimed ? '' : `<button onclick="deletePreRegistered('${d.device_id}')"
+                        style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px">✕ Remove</button>`}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function seedDevice() {
+            const deviceId = document.getElementById('seedDeviceId').value.trim().toUpperCase();
+            const label = document.getElementById('seedLabel').value.trim();
+            const numSwitches = parseInt(document.getElementById('seedNumSwitches').value, 10);
+            const alertEl = document.getElementById('seedAlert');
+            alertEl.innerHTML = '';
+
+            if (!deviceId) {
+                alertEl.innerHTML = '<span style="color:#f59e0b">⚠ Please enter a Device ID.</span>';
+                return;
+            }
+
+            try {
+                await apiPost('/api/admin/seed-devices', { device_id: deviceId, label, num_switches: numSwitches });
+                alertEl.innerHTML = `<span style="color:#22c55e">✅ Device ID <strong>${deviceId}</strong> registered successfully!</span>`;
+                document.getElementById('seedDeviceId').value = '';
+                document.getElementById('seedLabel').value = '';
+                loadPreRegistered();
+            } catch (err) {
+                alertEl.innerHTML = `<span style="color:#f87171">❌ ${err.message}</span>`;
+            }
+        }
+
+        async function deletePreRegistered(deviceId) {
+            if (!confirm(`Remove pre-registered device ID "${deviceId}"? This cannot be undone.`)) return;
+            try {
+                await apiDelete(`/api/admin/pre-registered/${deviceId}`);
+                loadPreRegistered();
+            } catch (err) {
+                showAlert(document.getElementById('alertBox'), err.message, 'error');
+            }
+        }
+
+        /* ── Scroll-to-top button ────────────────────────────────────── */
+
+        window.addEventListener('scroll', () => {
+            document.getElementById('scrollTopBtn').classList.toggle('visible', window.scrollY > 300);
+        });
+
+        loadDevices();
+        loadPreRegistered();
+    </script>
+</body>
+
+</html>

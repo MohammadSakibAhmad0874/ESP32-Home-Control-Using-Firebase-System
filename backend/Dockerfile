@@ -6,8 +6,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy backend application
 COPY . .
+
+# The web/ folder is copied into backend/web/ before building
+# (so COPY . . above picks it up at /app/web/)
+# main.py detects this and serves it from /app/web/
 
 EXPOSE 8000
 

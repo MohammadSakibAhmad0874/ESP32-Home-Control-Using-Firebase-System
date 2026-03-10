@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeControl — Dashboard</title>
+    <meta name="description" content="Control your smart home devices in real-time.">
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js for Power Usage -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            padding-top: 0;
+        }
+
+        #mainContent {
+            display: none;
+        }
+
+        /* ── Tab System ── */
+        .tabs-nav {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 24px;
+            padding-bottom: 0;
+        }
+
+        .tab-btn {
+            padding: 10px 18px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-2);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            letter-spacing: .3px;
+            margin-bottom: -1px;
+            border-radius: 6px 6px 0 0;
+            font-family: inherit;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-1);
+            background: rgba(255, 255, 255, .03);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-2);
+            border-bottom-color: var(--accent);
+            background: rgba(109, 93, 252, .06);
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* ── Modals ── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .65);
+            backdrop-filter: blur(5px);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-backdrop.open {
+            display: flex;
+        }
+
+        .modal {
+            background: #131520;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .7);
+            animation: fadeIn .2s ease;
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        /* ── Status / info bar ── */
+        .last-seen-text {
+            font-size: 12px;
+            color: var(--text-3);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: var(--text-2);
+            margin-bottom: 14px;
+        }
+
+        /* ── Wattage pill on relay card ── */
+        .wattage-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        .wattage-input {
+            width: 64px;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, .3);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-1);
+            font-size: 12px;
+            font-family: inherit;
+            outline: none;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .wattage-input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+
+        .wattage-label {
+            font-size: 11px;
+            color: var(--text-3);
+        }
+
+        .wattage-save-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+            background: rgba(109, 93, 252, .15);
+            border: 1px solid rgba(109, 93, 252, .3);
+            border-radius: 5px;
+            color: var(--accent-2);
+            cursor: pointer;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+
+        .wattage-save-btn:hover {
+            background: rgba(109, 93, 252, .25);
+        }
+
+        /* ── Schedules ── */
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .schedule-table th {
+            text-align: left;
+            padding: 8px 12px;
+            color: var(--text-3);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .schedule-table td {
+            padding: 12px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, .04);
+            color: var(--text-1);
+            vertical-align: middle;
+        }
+
+        .schedule-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .schedule-table tr:hover td {
+            background: rgba(255, 255, 255, .02);
+        }
+
+        .sched-action-on {
+            color: #4ade80;
+            font-weight: 700;
+        }
+
+        .sched-action-off {
+            color: #f87171;
+            font-weight: 700;
+        }
+
+        .sched-days {
+            font-size: 11px;
+            color: var(--text-2);
+        }
+
+        .toggle-enabled {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+
+        .toggle-enabled input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .te-track {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: rgba(255, 255, 255, .1);
+            border-radius: 20px;
+            transition: .25s;
+        }
+
+        .te-track:before {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            transition: .25s;
+        }
+
+        .toggle-enabled input:checked+.te-track {
+            background: var(--accent);
+        }
+
+        .toggle-enabled input:checked+.te-track:before {
+            transform: translateX(16px);
+        }
+
+        .sched-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .sched-edit-btn,
+        .sched-del-btn {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-family: inherit;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid;
+            transition: var(--transition);
+        }
+
+        .sched-edit-btn {
+            background: rgba(109, 93, 252, .12);
+            border-color: rgba(109, 93, 252, .3);
+            color: var(--accent-2);
+        }
+
+        .sched-edit-btn:hover {
+            background: rgba(109, 93, 252, .22);
+        }
+
+        .sched-del-btn {
+            background: rgba(239, 68, 68, .1);
+            border-color: rgba(239, 68, 68, .3);
+            color: #f87171;
+        }
+
+        .sched-del-btn:hover {
+            background: rgba(239, 68, 68, .2);
+        }
+
+        .add-schedule-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .days-picker {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .day-chip {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid var(--border);
+            color: var(--text-2);
+            cursor: pointer;
+            user-select: none;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .day-chip.selected {
+            background: rgba(109, 93, 252, .25);
+            border-color: rgba(109, 93, 252, .5);
+            color: var(--accent-2);
+        }
+
+        /* ── Power Usage ── */
+        .power-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .power-stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .power-stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+
+        .power-stat-value.green {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .power-stat-label {
+            font-size: 12px;
+            color: var(--text-3);
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+            position: relative;
+            height: 280px;
+        }
+
+        .power-relay-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .power-relay-table th {
+            text-align: left;
+            padding: 12px 16px;
+            color: var(--text-3);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0, 0, 0, .2);
+        }
+
+        .power-relay-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, .04);
+            color: var(--text-1);
+        }
+
+        .power-relay-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .kwh-bar-bg {
+            height: 6px;
+            background: rgba(255, 255, 255, .08);
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .kwh-bar {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            transition: width .5s ease;
+        }
+
+        .period-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .period-btn {
+            padding: 7px 14px;
+            font-size: 12px;
+            font-family: inherit;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .04);
+            color: var(--text-2);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .period-btn.active {
+            background: rgba(109, 93, 252, .2);
+            border-color: rgba(109, 93, 252, .4);
+            color: var(--accent-2);
+        }
+
+        .period-btn:hover {
+            background: rgba(255, 255, 255, .07);
+        }
+
+        .empty-sched {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-3);
+            font-size: 14px;
+        }
+
+        .empty-sched .empty-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="nav-brand">
+                <span>🏠</span> HomeControl
+            </div>
+            <div class="nav-right">
+                <div class="nav-user">Hey, <strong id="navName">—</strong></div>
+                <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Connecting -->
+    <div id="connectingScreen" class="container">
+        <div class="connecting-overlay">
+            <div class="spinner"></div>
+            <p>Connecting to your device…</p>
+        </div>
+    </div>
+
+    <!-- Main -->
+    <div id="mainContent" class="container">
+        <div class="page-header">
+            <h1>Device Dashboard</h1>
+            <p>Control, schedule, and monitor your smart home</p>
+        </div>
+
+        <!-- Device Info Bar -->
+        <div class="device-info-bar" id="deviceInfoBar">
+            <span class="info-item">
+                📟 <strong id="infoDeviceId">—</strong>
+            </span>
+            <span id="statusBadge" class="badge badge-offline"><span class="dot"></span> Offline</span>
+            <span class="info-item">
+                📡 IP: <strong id="infoIp">—</strong>
+            </span>
+            <span class="info-item last-seen-text">
+                ⏱ Last seen: <span id="infoLastSeen">—</span>
+            </span>
+            <button class="btn btn-ghost btn-sm" onclick="openRenameModal(null)" id="btnRenameFirst"
+                style="margin-left:auto" title="Rename switches">✏️ Rename</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab('switches')" id="tab-switches">⚡ Switches</button>
+            <button class="tab-btn" onclick="switchTab('schedules')" id="tab-schedules">⏰ Schedules</button>
+            <button class="tab-btn" onclick="switchTab('power')" id="tab-power">📊 Power Usage</button>
+        </div>
+
+        <!-- Tab: Switches -->
+        <div class="tab-panel active" id="panel-switches">
+            <p class="section-title">Switches</p>
+            <div class="relays-grid" id="relaysGrid">
+                <div class="empty-state">
+                    <div class="empty-icon">🔌</div>
+                    <h3>No switches found</h3>
+                    <p>Register or reconnect your device.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Schedules -->
+        <div class="tab-panel" id="panel-schedules">
+            <div class="add-schedule-btn">
+                <p class="section-title" style="margin-bottom:0">Automation Schedules</p>
+                <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openScheduleModal()">+ Add
+                    Schedule</button>
+            </div>
+            <div class="alert" id="schedAlert"></div>
+            <div id="schedulesList">
+                <div class="empty-sched">
+                    <div class="empty-icon">📅</div>
+                    <p>Loading schedules…</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Power Usage -->
+        <div class="tab-panel" id="panel-power">
+            <p class="section-title">Power Usage & Cost Estimator</p>
+            <p style="font-size:13px;color:var(--text-3);margin-bottom:20px;">
+                Tracks how long each switch stays ON and estimates electricity consumption at ₹8/kWh. Set each switch's
+                wattage in the <strong>Switches</strong> tab.
+            </p>
+
+            <div class="period-selector">
+                <button class="period-btn active" onclick="loadPower(7, this)">7 Days</button>
+                <button class="period-btn" onclick="loadPower(14, this)">14 Days</button>
+                <button class="period-btn" onclick="loadPower(30, this)">30 Days</button>
+            </div>
+
+            <!-- Summary stats -->
+            <div class="power-stats-grid" id="powerStats">
+                <div class="power-stat-card">
+                    <div class="power-stat-value" id="statTotalKwh">—</div>
+                    <div class="power-stat-label">Total kWh</div>
+                </div>
+                <div class="power-stat-card">
+                    <div class="power-stat-value green" id="statTotalCost">—</div>
+                    <div class="power-stat-label">Est. Cost (₹)</div>
+                </div>
+                <div class="power-stat-card">
+                    <div class="power-stat-value" id="statPeriod">—</div>
+                    <div class="power-stat-label">Period</div>
+                </div>
+                <div class="power-stat-card">
+                    <div class="power-stat-value" id="statMostUsed">—</div>
+                    <div class="power-stat-label">Most Used Switch</div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="chart-container">
+                <canvas id="powerChart"></canvas>
+            </div>
+
+            <!-- Per-relay breakdown table -->
+            <div id="powerTableContainer">
+                <table class="power-relay-table" id="powerRelayTable">
+                    <thead>
+                        <tr>
+                            <th>Switch</th>
+                            <th>Hours ON</th>
+                            <th>kWh Used</th>
+                            <th>Est. Cost ₹</th>
+                            <th>Wattage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="powerTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Rename Modal ── -->
+    <div class="modal-backdrop" id="renameModal">
+        <div class="modal">
+            <h3>✏️ Rename Switch</h3>
+            <div class="form-group">
+                <label for="renameInput">New Name</label>
+                <input type="text" id="renameInput" placeholder="e.g. Living Room Light" maxlength="40">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeRenameModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitRename()" id="renameSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Schedule Modal ── -->
+    <div class="modal-backdrop" id="scheduleModal">
+        <div class="modal" style="max-width:460px">
+            <h3 id="schedModalTitle">⏰ Add Schedule</h3>
+            <input type="hidden" id="editSchedId">
+
+            <div class="form-group">
+                <label for="schedRelay">Switch</label>
+                <select id="schedRelay"
+                    style="width:100%;padding:10px 12px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:var(--text-1);font-size:14px;font-family:inherit;outline:none"></select>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div class="form-group">
+                    <label for="schedAction">Action</label>
+                    <select id="schedAction"
+                        style="width:100%;padding:10px 12px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:var(--text-1);font-size:14px;font-family:inherit;outline:none">
+                        <option value="on">🟢 Turn ON</option>
+                        <option value="off">🔴 Turn OFF</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="schedTime">Time (24h)</label>
+                    <input type="time" id="schedTime"
+                        style="width:100%;padding:10px 12px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:var(--text-1);font-size:14px;font-family:inherit;outline:none">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Days</label>
+                <div class="days-picker" id="daysPicker">
+                    <button type="button" class="day-chip" data-day="Mon">Mon</button>
+                    <button type="button" class="day-chip" data-day="Tue">Tue</button>
+                    <button type="button" class="day-chip" data-day="Wed">Wed</button>
+                    <button type="button" class="day-chip" data-day="Thu">Thu</button>
+                    <button type="button" class="day-chip" data-day="Fri">Fri</button>
+                    <button type="button" class="day-chip" data-day="Sat">Sat</button>
+                    <button type="button" class="day-chip" data-day="Sun">Sun</button>
+                    <button type="button" class="day-chip" data-day="all" id="chipAll">Every Day</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="schedLabel">Label <span
+                        style="color:var(--text-3);font-weight:400">(optional)</span></label>
+                <input type="text" id="schedLabel" placeholder="e.g. Night mode" maxlength="50">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeScheduleModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSchedule()" id="schedSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        requireAuth();
+
+        const deviceId = getDeviceId();
+        document.getElementById('navName').textContent = getName();
+        document.getElementById('infoDeviceId').textContent = deviceId;
+
+        let ws = null;
+        let currentRelays = {};
+        let renameTarget = null;
+        let lastSeenTimer = null;
+        let lastSeenTs = 0;
+        let powerChartInstance = null;
+
+        /* ── Bootstrap ── */
+        async function init() {
+            try {
+                const device = await apiGet(`/api/devices/${deviceId}`);
+                renderDevice(device);
+                showMain();
+                connectWS();
+                loadSchedules();
+                loadPower(7, document.querySelector('.period-btn'));
+            } catch (err) {
+                if (err.message.includes('401') || err.message.includes('authenticated')) {
+                    clearAuth();
+                    window.location.href = '/index.html';
+                } else {
+                    showMain();
+                    connectWS();
+                }
+            }
+        }
+
+        function showMain() {
+            document.getElementById('connectingScreen').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        /* ── Tab System ── */
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById(`tab-${name}`).classList.add('active');
+            document.getElementById(`panel-${name}`).classList.add('active');
+        }
+
+        /* ── WebSocket ── */
+        function connectWS() {
+            if (ws) ws.close();
+            const url = wsUrl(`/ws/dashboard/${deviceId}?token=${getToken()}`);
+            ws = new WebSocket(url);
+            ws.onmessage = e => handleWSMessage(JSON.parse(e.data));
+            ws.onclose = () => setTimeout(connectWS, 5000);
+        }
+
+        function handleWSMessage(msg) {
+            if (msg.type === 'snapshot') {
+                renderDevice(msg.device);
+            } else if (msg.type === 'relay_update') {
+                updateRelayState(msg.relay_key, msg.state);
+            } else if (msg.type === 'full_update') {
+                Object.entries(msg.states || {}).forEach(([k, s]) => updateRelayState(k, s));
+            } else if (msg.type === 'status') {
+                setOnlineStatus(msg.online);
+            } else if (msg.type === 'heartbeat') {
+                lastSeenTs = msg.last_seen;
+                setOnlineStatus(true);
+            }
+        }
+
+        /* ── Render Device ── */
+        function renderDevice(device) {
+            currentRelays = device.relays || {};
+            setOnlineStatus(device.online);
+            document.getElementById('infoIp').textContent = device.ip_address || '—';
+            lastSeenTs = device.last_seen;
+            renderRelays();
+        }
+
+        function renderRelays() {
+            const grid = document.getElementById('relaysGrid');
+            grid.innerHTML = '';
+            const keys = Object.keys(currentRelays).sort();
+            if (!keys.length) {
+                grid.innerHTML = `<div class="empty-state"><div class="empty-icon">🔌</div><h3>No switches</h3></div>`;
+                return;
+            }
+            keys.forEach(key => {
+                const relay = currentRelays[key];
+                const isOn = relay.state;
+                const card = document.createElement('div');
+                card.className = `relay-card${isOn ? ' on' : ''}`;
+                card.id = `card-${key}`;
+                card.innerHTML = `
+                  <div class="relay-header">
+                    <span class="relay-icon">${relayIcon(relay.name)}</span>
+                    <button class="btn btn-ghost btn-sm" title="Rename" onclick="openRenameModal('${key}')">✏️</button>
+                  </div>
+                  <div class="relay-name">${relay.name}</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                    <span class="relay-state-label ${isOn ? 'on' : 'off'}" id="label-${key}">
+                      ${isOn ? 'ON' : 'OFF'}
+                    </span>
+                    <label class="toggle-switch">
+                      <input type="checkbox" ${isOn ? 'checked' : ''} onchange="handleToggle('${key}', this.checked)" id="toggle-${key}">
+                      <span class="toggle-track"></span>
+                    </label>
+                  </div>
+                  <div class="wattage-row">
+                    <span class="wattage-label">⚡</span>
+                    <input type="number" class="wattage-input" id="watt-${key}" value="${relay.wattage || 60}" min="1" max="10000" step="1">
+                    <span class="wattage-label">W</span>
+                    <button class="wattage-save-btn" onclick="saveWattage('${key}')">Save</button>
+                  </div>
+                `;
+                grid.appendChild(card);
+            });
+            startLastSeenTimer();
+            populateSchedRelaySelect();
+        }
+
+        function updateRelayState(relayKey, state) {
+            if (!currentRelays[relayKey]) return;
+            currentRelays[relayKey].state = state;
+            const card = document.getElementById(`card-${relayKey}`);
+            const label = document.getElementById(`label-${relayKey}`);
+            const toggle = document.getElementById(`toggle-${relayKey}`);
+            if (card) card.classList.toggle('on', state);
+            if (label) { label.textContent = state ? 'ON' : 'OFF'; label.className = `relay-state-label ${state ? 'on' : 'off'}`; }
+            if (toggle) toggle.checked = state;
+        }
+
+        /* ── Toggle ── */
+        async function handleToggle(relayKey, newState) {
+            updateRelayState(relayKey, newState);
+            try {
+                await toggleRelay(deviceId, relayKey, newState);
+            } catch {
+                updateRelayState(relayKey, !newState);
+                const t = document.getElementById(`toggle-${relayKey}`);
+                if (t) t.checked = !newState;
+            }
+        }
+
+        /* ── Wattage ── */
+        async function saveWattage(relayKey) {
+            const input = document.getElementById(`watt-${relayKey}`);
+            const watts = parseFloat(input.value);
+            if (!watts || watts < 1) return;
+            try {
+                await apiPut(`/api/devices/${deviceId}/relay/${relayKey}/wattage`, { wattage: watts });
+                currentRelays[relayKey].wattage = watts;
+                input.style.borderColor = '#4ade80';
+                setTimeout(() => input.style.borderColor = '', 1500);
+            } catch (err) {
+                input.style.borderColor = '#f87171';
+                setTimeout(() => input.style.borderColor = '', 1500);
+            }
+        }
+
+        /* ── Status ── */
+        function setOnlineStatus(online) {
+            const badge = document.getElementById('statusBadge');
+            if (badge) {
+                badge.className = `badge ${online ? 'badge-online' : 'badge-offline'}`;
+                badge.innerHTML = `<span class="dot"></span> ${online ? 'Online' : 'Offline'}`;
+            }
+        }
+        function startLastSeenTimer() {
+            if (lastSeenTimer) clearInterval(lastSeenTimer);
+            lastSeenTimer = setInterval(() => {
+                document.getElementById('infoLastSeen').textContent = timeAgo(lastSeenTs);
+            }, 10000);
+            document.getElementById('infoLastSeen').textContent = timeAgo(lastSeenTs);
+        }
+
+        /* ── Rename Modal ── */
+        function openRenameModal(key) {
+            renameTarget = key;
+            const input = document.getElementById('renameInput');
+            input.value = key ? (currentRelays[key]?.name || '') : '';
+            document.getElementById('renameModal').classList.add('open');
+            setTimeout(() => input.focus(), 50);
+        }
+        function closeRenameModal() {
+            document.getElementById('renameModal').classList.remove('open');
+            renameTarget = null;
+        }
+        async function submitRename() {
+            if (!renameTarget) return;
+            const name = document.getElementById('renameInput').value.trim();
+            if (!name) return;
+            const btn = document.getElementById('renameSaveBtn');
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                await apiPut(`/api/devices/${deviceId}/relay/${renameTarget}/rename`, { name });
+                if (currentRelays[renameTarget]) { currentRelays[renameTarget].name = name; renderRelays(); }
+            } catch { }
+            closeRenameModal();
+            btn.disabled = false; btn.textContent = 'Save';
+        }
+        document.getElementById('renameModal').addEventListener('click', function (e) { if (e.target === this) closeRenameModal(); });
+        document.getElementById('renameInput').addEventListener('keydown', e => { if (e.key === 'Enter') submitRename(); });
+
+        /* ════════════════════════════════════════════════
+           SCHEDULES
+        ════════════════════════════════════════════════ */
+        let allSchedules = [];
+        let editingSchedId = null;
+        const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'all'];
+
+        function populateSchedRelaySelect() {
+            const sel = document.getElementById('schedRelay');
+            sel.innerHTML = '';
+            Object.entries(currentRelays).sort().forEach(([key, relay]) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${relayIcon(relay.name)} ${relay.name} (${key})`;
+                sel.appendChild(opt);
+            });
+        }
+
+        async function loadSchedules() {
+            try {
+                allSchedules = await apiGet(`/api/devices/${deviceId}/schedules`);
+                renderSchedules();
+            } catch (err) {
+                showAlert(document.getElementById('schedAlert'), err.message, 'error');
+            }
+        }
+
+        function renderSchedules() {
+            const container = document.getElementById('schedulesList');
+            if (!allSchedules.length) {
+                container.innerHTML = `<div class="empty-sched"><div class="empty-icon">⏰</div><p>No schedules yet. Add your first automation!</p></div>`;
+                return;
+            }
+            const relayName = (key) => currentRelays[key]?.name || key;
+            container.innerHTML = `
+              <div style="overflow-x:auto">
+              <table class="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Label / Switch</th>
+                    <th>Action</th>
+                    <th>Time</th>
+                    <th>Days</th>
+                    <th>Enabled</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allSchedules.map(s => `
+                  <tr id="sched-row-${s.id}">
+                    <td>
+                      <div style="font-weight:600">${s.label || '—'}</div>
+                      <div style="font-size:11px;color:var(--text-3)">${relayIcon(relayName(s.relay_key))} ${relayName(s.relay_key)}</div>
+                    </td>
+                    <td><span class="sched-action-${s.action}">${s.action === 'on' ? '🟢 ON' : '🔴 OFF'}</span></td>
+                    <td style="font-family:monospace;font-size:15px;font-weight:700">${s.time}</td>
+                    <td><span class="sched-days">${formatDays(s.days)}</span></td>
+                    <td>
+                      <label class="toggle-enabled">
+                        <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleSchedEnabled('${s.id}', this.checked)">
+                        <span class="te-track"></span>
+                      </label>
+                    </td>
+                    <td>
+                      <div class="sched-actions">
+                        <button class="sched-edit-btn" onclick="openScheduleModal('${s.id}')">✏️ Edit</button>
+                        <button class="sched-del-btn" onclick="deleteSchedule('${s.id}')">🗑</button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+              </div>`;
+        }
+
+        function formatDays(days) {
+            if (days === 'all') return 'Every Day';
+            return days.split(',').map(d => d.trim()).join(' · ');
+        }
+
+        function openScheduleModal(schedId = null) {
+            editingSchedId = schedId;
+            const modal = document.getElementById('scheduleModal');
+            document.getElementById('schedModalTitle').textContent = schedId ? '✏️ Edit Schedule' : '⏰ Add Schedule';
+            document.getElementById('editSchedId').value = schedId || '';
+            populateSchedRelaySelect();
+
+            // Reset day chips
+            document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('selected'));
+
+            if (schedId) {
+                const s = allSchedules.find(x => x.id === schedId);
+                if (s) {
+                    document.getElementById('schedRelay').value = s.relay_key;
+                    document.getElementById('schedAction').value = s.action;
+                    document.getElementById('schedTime').value = s.time;
+                    document.getElementById('schedLabel').value = s.label || '';
+                    const days = s.days.split(',').map(d => d.trim());
+                    days.forEach(day => {
+                        const chip = document.querySelector(`.day-chip[data-day="${day}"]`);
+                        if (chip) chip.classList.add('selected');
+                    });
+                }
+            } else {
+                document.getElementById('schedRelay').selectedIndex = 0;
+                document.getElementById('schedAction').value = 'on';
+                document.getElementById('schedTime').value = '22:00';
+                document.getElementById('schedLabel').value = '';
+            }
+
+            modal.classList.add('open');
+        }
+
+        function closeScheduleModal() {
+            document.getElementById('scheduleModal').classList.remove('open');
+            editingSchedId = null;
+        }
+
+        // Day chip toggle
+        document.querySelectorAll('.day-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const day = chip.dataset.day;
+                if (day === 'all') {
+                    document.querySelectorAll('.day-chip').forEach(c => c.classList.remove('selected'));
+                    chip.classList.add('selected');
+                } else {
+                    document.getElementById('chipAll').classList.remove('selected');
+                    chip.classList.toggle('selected');
+                }
+            });
+        });
+
+        async function saveSchedule() {
+            const btn = document.getElementById('schedSaveBtn');
+            btn.disabled = true; btn.textContent = 'Saving…';
+
+            const selectedDays = Array.from(document.querySelectorAll('.day-chip.selected'))
+                .map(c => c.dataset.day);
+            if (!selectedDays.length) {
+                showAlert(document.getElementById('schedAlert'), 'Please select at least one day.', 'error');
+                switchTab('schedules');
+                btn.disabled = false; btn.textContent = 'Save';
+                return;
+            }
+
+            const payload = {
+                relay_key: document.getElementById('schedRelay').value,
+                action: document.getElementById('schedAction').value,
+                time: document.getElementById('schedTime').value,
+                days: selectedDays.join(','),
+                enabled: true,
+                label: document.getElementById('schedLabel').value.trim(),
+            };
+
+            try {
+                if (editingSchedId) {
+                    const updated = await apiPut(`/api/devices/${deviceId}/schedules/${editingSchedId}`, payload);
+                    allSchedules = allSchedules.map(s => s.id === editingSchedId ? updated : s);
+                } else {
+                    const created = await apiPost(`/api/devices/${deviceId}/schedules`, payload);
+                    allSchedules.push(created);
+                }
+                renderSchedules();
+                closeScheduleModal();
+            } catch (err) {
+                showAlert(document.getElementById('schedAlert'), err.message, 'error');
+                switchTab('schedules');
+            }
+            btn.disabled = false; btn.textContent = 'Save';
+        }
+
+        async function toggleSchedEnabled(schedId, enabled) {
+            try {
+                await apiPut(`/api/devices/${deviceId}/schedules/${schedId}`, { enabled });
+                const s = allSchedules.find(x => x.id === schedId);
+                if (s) s.enabled = enabled;
+            } catch (err) {
+                showAlert(document.getElementById('schedAlert'), err.message, 'error');
+            }
+        }
+
+        async function deleteSchedule(schedId) {
+            if (!confirm('Delete this schedule?')) return;
+            try {
+                await apiDelete(`/api/devices/${deviceId}/schedules/${schedId}`);
+                allSchedules = allSchedules.filter(s => s.id !== schedId);
+                renderSchedules();
+            } catch (err) {
+                showAlert(document.getElementById('schedAlert'), err.message, 'error');
+            }
+        }
+
+        document.getElementById('scheduleModal').addEventListener('click', function (e) { if (e.target === this) closeScheduleModal(); });
+
+        /* ════════════════════════════════════════════════
+           POWER USAGE
+        ════════════════════════════════════════════════ */
+        async function loadPower(days, btn) {
+            // Update active period button
+            if (btn) {
+                document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+
+            document.getElementById('statTotalKwh').textContent = '…';
+            document.getElementById('statTotalCost').textContent = '…';
+            document.getElementById('statPeriod').textContent = `${days} days`;
+            document.getElementById('statMostUsed').textContent = '…';
+
+            try {
+                const data = await apiGet(`/api/devices/${deviceId}/power?days=${days}`);
+                renderPowerStats(data);
+                renderPowerChart(data);
+                renderPowerTable(data);
+            } catch (err) {
+                document.getElementById('statTotalKwh').textContent = 'Error';
+                document.getElementById('statTotalCost').textContent = 'Error';
+            }
+        }
+
+        function renderPowerStats(data) {
+            document.getElementById('statTotalKwh').textContent = data.total_kwh.toFixed(2);
+            document.getElementById('statTotalCost').textContent = '₹' + data.total_cost_inr.toFixed(2);
+            document.getElementById('statPeriod').textContent = data.period_days + ' days';
+
+            // Most used relay
+            let maxHours = 0, maxName = 'None';
+            Object.entries(data.relays).forEach(([key, r]) => {
+                if (r.hours_on > maxHours) { maxHours = r.hours_on; maxName = r.name; }
+            });
+            document.getElementById('statMostUsed').textContent = maxName;
+        }
+
+        function renderPowerChart(data) {
+            const ctx = document.getElementById('powerChart').getContext('2d');
+            if (powerChartInstance) { powerChartInstance.destroy(); powerChartInstance = null; }
+
+            const labels = data.daily_breakdown.map(d => d.date);
+            const relayKeys = Object.keys(data.relays);
+            const COLORS = [
+                'rgba(109,93,252,0.85)', 'rgba(155,139,255,0.85)',
+                'rgba(34,197,94,0.75)', 'rgba(251,191,36,0.75)',
+                'rgba(239,68,68,0.75)', 'rgba(14,165,233,0.75)',
+                'rgba(168,85,247,0.75)', 'rgba(249,115,22,0.75)',
+            ];
+
+            const datasets = relayKeys.map((key, i) => ({
+                label: data.relays[key].name,
+                data: data.daily_breakdown.map(d => d.relays[key] ?? 0),
+                backgroundColor: COLORS[i % COLORS.length],
+                borderRadius: 4,
+                borderSkipped: false,
+            }));
+
+            powerChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(255,255,255,.6)', font: { size: 12 } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(3)} kWh`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { color: 'rgba(255,255,255,.5)', font: { size: 11 } },
+                            grid: { color: 'rgba(255,255,255,.04)' },
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: {
+                                color: 'rgba(255,255,255,.5)', font: { size: 11 },
+                                callback: v => v.toFixed(2) + ' kWh'
+                            },
+                            grid: { color: 'rgba(255,255,255,.06)' },
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderPowerTable(data) {
+            const tbody = document.getElementById('powerTableBody');
+            const relays = data.relays;
+            const maxKwh = Math.max(...Object.values(relays).map(r => r.kwh), 0.001);
+            tbody.innerHTML = Object.entries(relays).sort(([, a], [, b]) => b.kwh - a.kwh).map(([key, r]) => {
+                const pct = (r.kwh / maxKwh * 100).toFixed(1);
+                return `<tr>
+                  <td>
+                    <strong>${relayIcon(r.name)} ${r.name}</strong>
+                    <div style="font-size:11px;color:var(--text-3)">${key}</div>
+                  </td>
+                  <td>${r.hours_on.toFixed(1)} h</td>
+                  <td>
+                    ${r.kwh.toFixed(3)}
+                    <div class="kwh-bar-bg"><div class="kwh-bar" style="width:${pct}%"></div></div>
+                  </td>
+                  <td style="color:#4ade80;font-weight:700">₹${r.cost_inr.toFixed(2)}</td>
+                  <td style="color:var(--text-2)">${r.wattage}W</td>
+                </tr>`;
+            }).join('');
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
