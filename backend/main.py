@@ -180,9 +180,16 @@ async def schedule_executor():
 
 # ── Pre-registered device IDs to auto-seed on startup ────────────────────────
 PRE_REGISTERED_SEEDS = [
-    {"device_id": "SAKIB7860", "label": "Sakib Device",  "num_switches": 4},
-    {"device_id": "ADI8797",   "label": "Adi Device",    "num_switches": 4},
+    {"device_id": "SAKIB7860", "label": "Sakib Device",   "num_switches": 4},
+    {"device_id": "ADI8797",   "label": "Adi Device",     "num_switches": 4},
     {"device_id": "LUXMAN69",  "label": "Luxman Device",  "num_switches": 4},
+    # Admin device
+    {"device_id": "ADMIN01",   "label": "Admin Device",   "num_switches": 4},
+    # New user devices
+    {"device_id": "NEERAJ45",  "label": "Neeraj Device",  "num_switches": 4},
+    {"device_id": "ARUN420",   "label": "Arun Device",    "num_switches": 4},
+    {"device_id": "SAHIL69",   "label": "Sahil Device",   "num_switches": 4},
+    {"device_id": "MICKY123",  "label": "Micky Device",   "num_switches": 4},
 ]
 
 async def seed_pre_registered_devices():
@@ -282,6 +289,11 @@ class SeedDeviceRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     device_id: str
+    password: str
+
+class AdminLoginRequest(BaseModel):
+    """Admin login by email + password (no device_id needed)."""
+    email: str
     password: str
 
 class RelayToggleRequest(BaseModel):
@@ -563,6 +575,28 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token({"sub": user.id})
     return {"token": token, "device_id": device_id, "name": user.name, "is_admin": user.is_admin}
+
+
+@app.post("/api/auth/admin-login")
+async def admin_login(req: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Admin login by email + password.
+    Only succeeds if the user with that email is an admin.
+    Useful for the admin who claimed ADMIN01 and wants to log in with their email.
+    """
+    result = await db.execute(select(User).where(User.email == req.email))
+    user = result.scalar_one_or_none()
+    if not user or not verify_password(req.password, user.hashed_password):
+        raise HTTPException(401, "Incorrect email or password")
+    if not user.is_admin:
+        raise HTTPException(403, "This account does not have admin access")
+    token = create_access_token({"sub": user.id})
+    return {
+        "token": token,
+        "device_id": user.device_id,
+        "name": user.name,
+        "is_admin": True,
+    }
 
 
 @app.get("/api/auth/me")
