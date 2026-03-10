@@ -96,17 +96,16 @@
                             Enter the <strong>Device ID</strong> that was provided to you (printed on the device box or
                             given by your admin).
                         </p>
-                        <div class="form-group" style="display:flex;gap:8px;align-items:flex-end">
-                            <div style="flex:1">
-                                <label for="claimDeviceIdInput">Device ID</label>
-                                <input type="text" id="claimDeviceIdInput" placeholder="e.g. SAKIB7860"
-                                    style="text-transform:uppercase" autocomplete="off">
-                            </div>
-                            <button class="btn btn-primary" type="button" id="checkDeviceBtn" onclick="checkDeviceId()"
-                                style="white-space:nowrap;padding:10px 18px">
-                                ✔ Check ID
-                            </button>
+                        <div class="form-group">
+                            <label for="claimDeviceIdInput">Device ID</label>
+                            <input type="text" id="claimDeviceIdInput" placeholder="e.g. MICK345"
+                                style="text-transform:uppercase;width:100%;letter-spacing:1px;font-weight:600;color:#f0f0f8"
+                                autocomplete="off">
                         </div>
+                        <button class="btn btn-primary" type="button" id="checkDeviceBtn" onclick="checkDeviceId()"
+                            style="margin-top:4px">
+                            ✔ Check ID
+                        </button>
                         <div id="checkStatus" style="margin-top:10px;font-size:0.88em"></div>
                     </div>
 

@@ -180,21 +180,30 @@ async def schedule_executor():
 
 # ── Pre-registered device IDs to auto-seed on startup ────────────────────────
 PRE_REGISTERED_SEEDS = [
-    {"device_id": "SAKIB7860", "label": "Sakib Device",   "num_switches": 4},
-    {"device_id": "ADI8797",   "label": "Adi Device",     "num_switches": 4},
-    {"device_id": "LUXMAN69",  "label": "Luxman Device",  "num_switches": 4},
     # Admin device
     {"device_id": "ADMIN01",   "label": "Admin Device",   "num_switches": 4},
-    # New user devices
-    {"device_id": "NEERAJ45",  "label": "Neeraj Device",  "num_switches": 4},
-    {"device_id": "ARUN420",   "label": "Arun Device",    "num_switches": 4},
-    {"device_id": "SAHIL69",   "label": "Sahil Device",   "num_switches": 4},
-    {"device_id": "MICKY123",  "label": "Micky Device",   "num_switches": 4},
+    # Registered user devices
+    {"device_id": "AMAN780",   "label": "Aman Device",    "num_switches": 4},
+    {"device_id": "NIKHIL567", "label": "Nikhil Device",  "num_switches": 4},
+    {"device_id": "MICK345",   "label": "Mick Device",    "num_switches": 4},
 ]
 
 async def seed_pre_registered_devices():
-    """Insert the factory device IDs if they don't already exist."""
+    """Sync the database pre_registered_devices table to match PRE_REGISTERED_SEEDS.
+    - Inserts new seed entries that don't exist yet.
+    - Deletes old unclaimed entries that are no longer in the seed list.
+    """
     async with AsyncSessionLocal() as db:
+        seed_ids = {entry["device_id"] for entry in PRE_REGISTERED_SEEDS}
+
+        # ── Remove old unclaimed devices no longer in the seed list ────────
+        all_pre = await db.execute(select(PreRegisteredDevice))
+        for pre in all_pre.scalars().all():
+            if pre.device_id not in seed_ids and not pre.is_claimed:
+                await db.delete(pre)
+                print(f"[Startup] Removed old pre-registered device: {pre.device_id}")
+
+        # ── Insert new seed entries if they don't exist yet ────────────────
         for entry in PRE_REGISTERED_SEEDS:
             existing = await db.execute(
                 select(PreRegisteredDevice).where(
@@ -209,8 +218,10 @@ async def seed_pre_registered_devices():
                     is_claimed=False,
                     created_at=int(time.time()),
                 ))
+                print(f"[Startup] Seeded new pre-registered device: {entry['device_id']}")
+
         await db.commit()
-        print("[Startup] Pre-registered device seeds checked/inserted.")
+        print("[Startup] Pre-registered device seeds synced.")
 
 
 @asynccontextmanager

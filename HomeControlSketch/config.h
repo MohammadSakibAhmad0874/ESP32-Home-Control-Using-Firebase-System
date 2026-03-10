@@ -18,7 +18,7 @@
 // Set this to your pre-registered Device ID.
 // The user will claim this ID from the web dashboard.
 // No password or JWT needed here — it's fetched automatically!
-#define DEVICE_ID  "SAKIB7860"    // ← Change this to your assigned Device ID
+#define DEVICE_ID  "MICK345"      // ← Mick's Device ID
 
 // ============= Access Point Configuration =============
 // Setup portal AP (used during initial WiFi setup only)
