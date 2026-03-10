@@ -2,12 +2,23 @@
  * Configuration File
  * Edit this file with your settings before uploading to ESP32
  * 
- * NOTE: WiFi credentials are now configured through the web
- * setup wizard — no need to edit them here!
+ * ✅ NEW: No JWT token needed!
+ * Just set your DEVICE_ID below. The firmware auto-fetches
+ * the auth token on boot once the device is claimed online.
+ * 
+ * Step 1: Set DEVICE_ID to your pre-registered ID (given by admin)
+ * Step 2: Upload firmware to ESP32 (ONE TIME only)
+ * Step 3: User registers online at the dashboard → device works automatically!
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
+
+// ============= ★ YOUR DEVICE ID ★ =============
+// Set this to your pre-registered Device ID.
+// The user will claim this ID from the web dashboard.
+// No password or JWT needed here — it's fetched automatically!
+#define DEVICE_ID  "SAKIB7860"    // ← Change this to your assigned Device ID
 
 // ============= Access Point Configuration =============
 // Setup portal AP (used during initial WiFi setup only)
@@ -58,7 +69,7 @@ const unsigned long WIFI_TIMEOUT = 20000;  // 20 seconds
 // Change the hostname below to customize the URL
 const char* MDNS_HOSTNAME = "smarthome";  // → http://smarthome.local
 
-// ============= Switch Names (for web interface) =============
+// ============= Switch Names (for local web interface) =============
 const char* SWITCH_1_NAME = "Living Room";
 const char* SWITCH_2_NAME = "Bedroom";
 const char* SWITCH_3_NAME = "Kitchen";

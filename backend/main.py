@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 
 from auth import create_access_token, hash_password, verify_password, decode_token
 from database import get_db, init_db, AsyncSessionLocal
-from models import Device, Relay, User, Schedule, PowerLog
+from models import Device, Relay, User, Schedule, PowerLog, PreRegisteredDevice
 
 # ── WebSocket connection manager ─────────────────────────────────────────────
 
@@ -178,9 +178,38 @@ async def schedule_executor():
 
 # ── App lifecycle ─────────────────────────────────────────────────────────────
 
+# ── Pre-registered device IDs to auto-seed on startup ────────────────────────
+PRE_REGISTERED_SEEDS = [
+    {"device_id": "SAKIB7860", "label": "Sakib Device",  "num_switches": 4},
+    {"device_id": "ADI8797",   "label": "Adi Device",    "num_switches": 4},
+    {"device_id": "LUXMAN69",  "label": "Luxman Device",  "num_switches": 4},
+]
+
+async def seed_pre_registered_devices():
+    """Insert the factory device IDs if they don't already exist."""
+    async with AsyncSessionLocal() as db:
+        for entry in PRE_REGISTERED_SEEDS:
+            existing = await db.execute(
+                select(PreRegisteredDevice).where(
+                    PreRegisteredDevice.device_id == entry["device_id"]
+                )
+            )
+            if not existing.scalar_one_or_none():
+                db.add(PreRegisteredDevice(
+                    device_id=entry["device_id"],
+                    label=entry["label"],
+                    num_switches=entry["num_switches"],
+                    is_claimed=False,
+                    created_at=int(time.time()),
+                ))
+        await db.commit()
+        print("[Startup] Pre-registered device seeds checked/inserted.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await seed_pre_registered_devices()
     # Start the background schedule executor
     task = asyncio.create_task(schedule_executor())
     yield
@@ -236,6 +265,21 @@ class RegisterRequest(BaseModel):
     num_switches: int = 4
     switch_names: list[str] = []
 
+class ClaimDeviceRequest(BaseModel):
+    """Used by users to claim a pre-registered device ID and set their password."""
+    name: str
+    device_id: str
+    email: str
+    password: str
+    num_switches: Optional[int] = None   # If None, use the pre-registered default
+    switch_names: list[str] = []
+
+class SeedDeviceRequest(BaseModel):
+    """Admin: add a new pre-registered device ID."""
+    device_id: str
+    label: str = ""
+    num_switches: int = 4
+
 class LoginRequest(BaseModel):
     device_id: str
     password: str
@@ -267,14 +311,182 @@ class ScheduleUpdateRequest(BaseModel):
 
 # ── Auth endpoints ────────────────────────────────────────────────────────────
 
+# ── Public: Check if a device ID is available to claim ───────────────────────
+@app.get("/api/devices/check/{device_id}")
+async def check_device_id(device_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Public endpoint. Returns the status of a pre-registered device ID.
+    Used by the web "Claim" form to validate the device ID before showing the full form.
+    """
+    device_id = device_id.upper().strip()
+    result = await db.execute(
+        select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+    )
+    pre = result.scalar_one_or_none()
+    if not pre:
+        raise HTTPException(404, "Device ID not found. Please check the ID or contact support.")
+    if pre.is_claimed:
+        raise HTTPException(409, "This Device ID has already been registered. Please login instead.")
+    return {
+        "device_id": pre.device_id,
+        "label": pre.label,
+        "num_switches": pre.num_switches,
+        "is_claimed": pre.is_claimed,
+    }
+
+
+# ── Public: Claim a pre-registered device ─────────────────────────────────────
+@app.post("/api/auth/claim")
+async def claim_device(req: ClaimDeviceRequest, db: AsyncSession = Depends(get_db)):
+    """
+    User claims a pre-registered device ID, sets their own password.
+    This replaces the old open registration flow.
+    """
+    device_id = req.device_id.upper().strip()
+    if not device_id:
+        raise HTTPException(400, "Device ID is required")
+    if len(req.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+
+    # Check it is a pre-registered, unclaimed device
+    pre_result = await db.execute(
+        select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+    )
+    pre = pre_result.scalar_one_or_none()
+    if not pre:
+        raise HTTPException(400, "Device ID not found. It must be pre-registered by the admin.")
+    if pre.is_claimed:
+        raise HTTPException(400, "This Device ID is already claimed. Please login instead.")
+
+    # Check no Device record exists yet (double-safety)
+    existing_dev = await db.execute(select(Device).where(Device.device_id == device_id))
+    if existing_dev.scalar_one_or_none():
+        raise HTTPException(400, f'Device ID "{device_id}" already registered.')
+
+    # Check email uniqueness
+    existing_user = await db.execute(select(User).where(User.email == req.email))
+    if existing_user.scalar_one_or_none():
+        raise HTTPException(400, "Email already registered")
+
+    now = int(time.time())
+    user_id = str(uuid.uuid4())
+    # Use the pre-registered switch count unless the user overrides
+    num_switches = req.num_switches if req.num_switches is not None else pre.num_switches
+    default_names = ["Living Room", "Bedroom", "Kitchen", "Fan",
+                     "Switch 5", "Switch 6", "Switch 7", "Switch 8"]
+
+    # Create device
+    device = Device(
+        device_id=device_id,
+        owner_name=req.name,
+        email=req.email,
+        num_switches=num_switches,
+        online=False,
+        last_seen=now,
+        created_at=now,
+    )
+    db.add(device)
+    await db.flush()
+
+    # Create relays
+    for i in range(1, num_switches + 1):
+        key = f"relay{i}"
+        name = (req.switch_names[i - 1] if i <= len(req.switch_names)
+                else default_names[i - 1] if i <= len(default_names)
+                else f"Switch {i}")
+        db.add(Relay(device_id=device_id, relay_key=key, name=name, state=False, wattage=60.0))
+
+    # Create user linked to this device
+    user = User(
+        id=user_id,
+        name=req.name,
+        email=req.email,
+        hashed_password=hash_password(req.password),
+        device_id=device_id,
+        is_admin=False,
+        created_at=now,
+    )
+    db.add(user)
+
+    # Mark pre-registered device as claimed
+    pre.is_claimed = True
+
+    await db.commit()
+
+    token = create_access_token({"sub": user_id})
+    return {"token": token, "device_id": device_id, "name": req.name}
+
+
+# ── Public: ESP32 auto-token endpoint ─────────────────────────────────────────
+@app.get("/api/esp/connect/{device_id}")
+async def esp_get_token(device_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Called by ESP32 on boot to fetch its JWT token automatically.
+    No password needed — the device_id is the identity. Returns a token
+    scoped to the device's owner user. If device is not yet claimed, returns 503
+    so the ESP32 can retry later (device will work once the user registers online).
+    """
+    device_id = device_id.upper().strip()
+
+    # Find the device
+    dev_result = await db.execute(select(Device).where(Device.device_id == device_id))
+    device = dev_result.scalar_one_or_none()
+    if not device:
+        # Check if it's pre-registered but not yet claimed
+        pre_result = await db.execute(
+            select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+        )
+        pre = pre_result.scalar_one_or_none()
+        if pre:
+            raise HTTPException(
+                status_code=503,
+                detail="Device not yet claimed. Please register on the dashboard first."
+            )
+        raise HTTPException(404, "Device ID not found.")
+
+    # Find owner user
+    user_result = await db.execute(
+        select(User).where(User.device_id == device_id)
+    )
+    owner = user_result.scalar_one_or_none()
+    if not owner:
+        raise HTTPException(503, "Device has no owner yet. Please register on the dashboard.")
+
+    token = create_access_token({"sub": owner.id})
+    return {
+        "token": token,
+        "device_id": device_id,
+        "name": owner.name,
+        "num_switches": device.num_switches,
+    }
+
+
 @app.post("/api/auth/register")
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Validate device ID format
+    """
+    Legacy / admin-level registration. Now validates that the device_id
+    is pre-registered (or creates it if admin). Kept for backward compatibility.
+    """
     device_id = req.device_id.upper().strip()
     if not device_id:
         raise HTTPException(400, "Device ID is required")
 
-    # Check device uniqueness
+    # Check the device_id is pre-registered
+    pre_result = await db.execute(
+        select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+    )
+    pre = pre_result.scalar_one_or_none()
+    if pre and pre.is_claimed:
+        raise HTTPException(400, f'Device ID "{device_id}" is already claimed. Please use login.')
+    if not pre:
+        raise HTTPException(
+            400,
+            f'Device ID "{device_id}" is not a registered device. '
+            'Please use a pre-registered Device ID provided to you, '
+            'or use the Claim Device tab.'
+        )
+
+    # Check device record uniqueness
     existing = await db.execute(select(Device).where(Device.device_id == device_id))
     if existing.scalar_one_or_none():
         raise HTTPException(400, f'Device ID "{device_id}" already exists')
@@ -286,6 +498,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     now = int(time.time())
     user_id = str(uuid.uuid4())
+    num_switches = req.num_switches
     default_names = ["Living Room", "Bedroom", "Kitchen", "Fan",
                      "Switch 5", "Switch 6", "Switch 7", "Switch 8"]
 
@@ -294,16 +507,16 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         device_id=device_id,
         owner_name=req.name,
         email=req.email,
-        num_switches=req.num_switches,
+        num_switches=num_switches,
         online=False,
         last_seen=now,
         created_at=now,
     )
     db.add(device)
-    await db.flush()  # Get device_id before creating relays
+    await db.flush()
 
     # Create relays
-    for i in range(1, req.num_switches + 1):
+    for i in range(1, num_switches + 1):
         key = f"relay{i}"
         name = (req.switch_names[i - 1] if i <= len(req.switch_names)
                 else default_names[i - 1] if i <= len(default_names)
@@ -321,6 +534,11 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         created_at=now,
     )
     db.add(user)
+
+    # Mark pre-registered as claimed
+    if pre:
+        pre.is_claimed = True
+
     await db.commit()
 
     token = create_access_token({"sub": user_id})
@@ -735,6 +953,77 @@ async def admin_list_devices(
     )
     devices = result.scalars().all()
     return [_device_to_dict(d) for d in devices]
+
+
+@app.get("/api/admin/pre-registered")
+async def admin_list_pre_registered(
+    admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all pre-registered device IDs with their claim status."""
+    result = await db.execute(
+        select(PreRegisteredDevice).order_by(PreRegisteredDevice.created_at)
+    )
+    devices = result.scalars().all()
+    return [
+        {
+            "device_id": d.device_id,
+            "label": d.label,
+            "num_switches": d.num_switches,
+            "is_claimed": d.is_claimed,
+            "created_at": d.created_at,
+        }
+        for d in devices
+    ]
+
+
+@app.post("/api/admin/seed-devices")
+async def admin_seed_device(
+    req: SeedDeviceRequest,
+    admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: pre-register a new device ID so a user can claim it later."""
+    device_id = req.device_id.upper().strip()
+    if not device_id:
+        raise HTTPException(400, "Device ID is required")
+
+    existing = await db.execute(
+        select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, f'Device ID "{device_id}" is already pre-registered')
+
+    db.add(PreRegisteredDevice(
+        device_id=device_id,
+        label=req.label or "",
+        num_switches=req.num_switches,
+        is_claimed=False,
+        created_at=int(time.time()),
+    ))
+    await db.commit()
+    return {"success": True, "device_id": device_id, "label": req.label, "num_switches": req.num_switches}
+
+
+@app.delete("/api/admin/pre-registered/{device_id}")
+async def admin_delete_pre_registered(
+    device_id: str,
+    admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: remove an unclaimed pre-registered device ID."""
+    device_id = device_id.upper()
+    result = await db.execute(
+        select(PreRegisteredDevice).where(PreRegisteredDevice.device_id == device_id)
+    )
+    pre = result.scalar_one_or_none()
+    if not pre:
+        raise HTTPException(404, "Pre-registered device not found")
+    if pre.is_claimed:
+        raise HTTPException(400, "Cannot delete a claimed device. Delete the Device record instead.")
+    await db.delete(pre)
+    await db.commit()
+    return {"success": True}
 
 
 @app.post("/api/admin/make-admin")

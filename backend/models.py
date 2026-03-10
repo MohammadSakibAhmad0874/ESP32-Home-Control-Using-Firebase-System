@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models — User, Device, Relay, Schedule, PowerLog
+SQLAlchemy ORM models — User, Device, Relay, Schedule, PowerLog, PreRegisteredDevice
 """
 from sqlalchemy import Column, String, Boolean, Integer, BigInteger, Float, ForeignKey, Text
 from sqlalchemy.orm import relationship
@@ -18,6 +18,20 @@ class User(Base):
     created_at = Column(BigInteger, default=0)
 
     device = relationship("Device", back_populates="users", foreign_keys=[device_id])
+
+
+class PreRegisteredDevice(Base):
+    """
+    Admin-seeded device IDs. Users claim these from the web dashboard.
+    Once claimed, a full Device + User record is created.
+    """
+    __tablename__ = "pre_registered_devices"
+
+    device_id    = Column(String, primary_key=True)   # e.g. SAKIB7860
+    label        = Column(String, default="")          # Optional friendly name
+    num_switches = Column(Integer, default=4)           # Number of relay switches
+    is_claimed   = Column(Boolean, default=False)       # True once a user registers
+    created_at   = Column(BigInteger, default=0)
 
 
 class Device(Base):

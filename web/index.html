@@ -62,7 +62,7 @@
                 <!-- Tabs -->
                 <div class="tabs">
                     <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">Login</button>
-                    <button class="tab-btn" id="tab-register" onclick="switchTab('register')">Register Device</button>
+                    <button class="tab-btn" id="tab-register" onclick="switchTab('register')">Claim Your Device</button>
                 </div>
 
                 <!-- Alert -->
@@ -73,7 +73,7 @@
                     <form id="loginForm" onsubmit="handleLogin(event)">
                         <div class="form-group">
                             <label for="loginDeviceId">Device ID</label>
-                            <input type="text" id="loginDeviceId" placeholder="e.g. SH-001" autocomplete="username"
+                            <input type="text" id="loginDeviceId" placeholder="e.g. MICKY123" autocomplete="username"
                                 required>
                         </div>
                         <div class="form-group">
@@ -87,50 +87,73 @@
                     </form>
                 </div>
 
-                <!-- ── Register Panel ── -->
+                <!-- ── Claim Panel ── -->
                 <div class="tab-panel" id="panel-register">
-                    <form id="registerForm" onsubmit="handleRegister(event)">
+
+                    <!-- Step 1: Device ID Check -->
+                    <div id="claimStep1">
+                        <p style="color:var(--text-2);font-size:0.92em;margin-bottom:16px;line-height:1.5">
+                            Enter the <strong>Device ID</strong> that was provided to you (printed on the device box or
+                            given by your admin).
+                        </p>
+                        <div class="form-group" style="display:flex;gap:8px;align-items:flex-end">
+                            <div style="flex:1">
+                                <label for="claimDeviceIdInput">Device ID</label>
+                                <input type="text" id="claimDeviceIdInput" placeholder="e.g. SAKIB7860"
+                                    style="text-transform:uppercase" autocomplete="off">
+                            </div>
+                            <button class="btn btn-primary" type="button" id="checkDeviceBtn" onclick="checkDeviceId()"
+                                style="white-space:nowrap;padding:10px 18px">
+                                ✔ Check ID
+                            </button>
+                        </div>
+                        <div id="checkStatus" style="margin-top:10px;font-size:0.88em"></div>
+                    </div>
+
+                    <!-- Step 2: Full claim form (hidden until step 1 passes) -->
+                    <form id="claimForm" onsubmit="handleClaim(event)" style="display:none">
+                        <div id="claimBanner" style="
+                            background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.35);
+                            border-radius:10px;padding:10px 14px;margin-bottom:16px;
+                            display:flex;align-items:center;gap:10px;font-size:0.9em;color:#22c55e">
+                            <span>✅</span>
+                            <span>Device <strong id="claimDeviceIdDisplay"></strong> is available! Set up your account
+                                below.</span>
+                        </div>
+                        <input type="hidden" id="claimDeviceIdHidden">
+
                         <div class="form-group">
-                            <label for="regName">Your Name</label>
-                            <input type="text" id="regName" placeholder="John Doe" required>
+                            <label for="claimName">Your Name</label>
+                            <input type="text" id="claimName" placeholder="John Doe" required>
                         </div>
                         <div class="form-group">
-                            <label for="regDeviceId">Device ID <span
-                                    style="color:var(--text-3);font-weight:400">(unique, e.g. SH-002)</span></label>
-                            <input type="text" id="regDeviceId" placeholder="SH-002" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="regEmail">Email</label>
-                            <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="email"
+                            <label for="claimEmail">Email</label>
+                            <input type="email" id="claimEmail" placeholder="you@example.com" autocomplete="email"
                                 required>
                         </div>
                         <div class="form-group">
-                            <label for="regPassword">Password</label>
-                            <input type="password" id="regPassword" placeholder="Min 6 characters"
+                            <label for="claimPassword">Choose a Password</label>
+                            <input type="password" id="claimPassword" placeholder="Min 6 characters"
                                 autocomplete="new-password" required minlength="6">
                         </div>
-                        <div class="form-group">
-                            <label for="regNumSwitches">Number of Switches</label>
-                            <select id="regNumSwitches" onchange="updateNameFields()">
-                                <option value="2">2</option>
-                                <option value="4" selected>4</option>
-                                <option value="6">6</option>
-                                <option value="8">8</option>
-                            </select>
-                        </div>
 
-                        <div id="switchNamesContainer">
+                        <div id="claimSwitchNamesContainer">
                             <label style="margin-bottom:8px;display:block">Switch Names <span
                                     style="color:var(--text-3);font-weight:400">(optional)</span></label>
-                            <div class="names-grid" id="namesGrid"></div>
+                            <div class="names-grid" id="claimNamesGrid"></div>
                         </div>
 
                         <hr class="divider">
-                        <button class="btn btn-primary" type="submit" id="registerBtn">
-                            📡 Register New Device
+                        <button class="btn btn-primary" type="submit" id="claimBtn">
+                            🏠 Activate My Device
+                        </button>
+                        <button type="button" onclick="resetClaimForm()" style="margin-top:8px;width:100%;background:none;border:1px solid var(--border);
+                            color:var(--text-3);border-radius:10px;padding:9px;cursor:pointer;font-size:0.88em">
+                            ← Use a different Device ID
                         </button>
                     </form>
                 </div>
+
             </div>
         </div>
     </div>
@@ -152,24 +175,6 @@
             document.getElementById(`panel-${tab}`).classList.add('active');
             hideAlert(document.getElementById('alertBox'));
         }
-
-        function updateNameFields() {
-            const n = parseInt(document.getElementById('regNumSwitches').value, 10);
-            const grid = document.getElementById('namesGrid');
-            grid.innerHTML = '';
-            for (let i = 0; i < n; i++) {
-                const div = document.createElement('div');
-                div.className = 'form-group';
-                div.innerHTML = `
-          <label>Switch ${i + 1}</label>
-          <input type="text" class="sw-name" placeholder="${DEFAULT_SWITCH_NAMES[i] || 'Switch ' + (i + 1)}">
-        `;
-                grid.appendChild(div);
-            }
-        }
-
-        // Initialize name fields
-        updateNameFields();
 
         async function handleLogin(e) {
             e.preventDefault();
@@ -193,37 +198,105 @@
             }
         }
 
-        async function handleRegister(e) {
+        // ── Claim Device Flow ─────────────────────────────────────────────────
+
+        let verifiedDeviceInfo = null;  // Stores { device_id, num_switches } from check
+
+        async function checkDeviceId() {
+            const input = document.getElementById('claimDeviceIdInput');
+            const deviceId = input.value.trim().toUpperCase();
+            const statusEl = document.getElementById('checkStatus');
+            const btn = document.getElementById('checkDeviceBtn');
+
+            if (!deviceId) {
+                statusEl.innerHTML = '<span style="color:#f59e0b">⚠ Please enter your Device ID first.</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loader-btn"></span>';
+            statusEl.innerHTML = '';
+
+            try {
+                const data = await apiGet(`/api/devices/check/${deviceId}`);
+                // Success: device is valid and unclaimed
+                verifiedDeviceInfo = data;
+                showClaimForm(deviceId, data.num_switches);
+            } catch (err) {
+                const msg = err.message || 'Unknown error';
+                if (msg.includes('already been registered') || msg.includes('already registered')) {
+                    statusEl.innerHTML = `<span style="color:#f87171">❌ <strong>${deviceId}</strong> is already registered. Try <a href="#" onclick="switchTab('login');return false" style="color:#60a5fa">logging in</a>.</span>`;
+                } else if (msg.includes('not found')) {
+                    statusEl.innerHTML = `<span style="color:#f87171">❌ Device ID <strong>${deviceId}</strong> not found. Please check the ID or contact your admin.</span>`;
+                } else {
+                    statusEl.innerHTML = `<span style="color:#f87171">❌ ${msg}</span>`;
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '✔ Check ID';
+            }
+        }
+
+        function showClaimForm(deviceId, numSwitches) {
+            document.getElementById('claimStep1').style.display = 'none';
+            document.getElementById('claimDeviceIdDisplay').textContent = deviceId;
+            document.getElementById('claimDeviceIdHidden').value = deviceId;
+            // Build switch name fields
+            const grid = document.getElementById('claimNamesGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < numSwitches; i++) {
+                const div = document.createElement('div');
+                div.className = 'form-group';
+                div.innerHTML = `<label>Switch ${i + 1}</label>
+                    <input type="text" class="claim-sw-name" placeholder="${DEFAULT_SWITCH_NAMES[i] || 'Switch ' + (i + 1)}">`;
+                grid.appendChild(div);
+            }
+            document.getElementById('claimForm').style.display = 'block';
+        }
+
+        function resetClaimForm() {
+            verifiedDeviceInfo = null;
+            document.getElementById('claimStep1').style.display = 'block';
+            document.getElementById('claimForm').style.display = 'none';
+            document.getElementById('checkStatus').innerHTML = '';
+            document.getElementById('claimDeviceIdInput').value = '';
+        }
+
+        async function handleClaim(e) {
             e.preventDefault();
             const alertEl = document.getElementById('alertBox');
-            const btn = document.getElementById('registerBtn');
+            const btn = document.getElementById('claimBtn');
 
-            const name = document.getElementById('regName').value.trim();
-            const device_id = document.getElementById('regDeviceId').value.trim().toUpperCase();
-            const email = document.getElementById('regEmail').value.trim();
-            const password = document.getElementById('regPassword').value;
-            const num_switches = parseInt(document.getElementById('regNumSwitches').value, 10);
-            const swInputs = [...document.querySelectorAll('.sw-name')];
+            const device_id = document.getElementById('claimDeviceIdHidden').value;
+            const name = document.getElementById('claimName').value.trim();
+            const email = document.getElementById('claimEmail').value.trim();
+            const password = document.getElementById('claimPassword').value;
+            const swInputs = [...document.querySelectorAll('.claim-sw-name')];
             const switch_names = swInputs.map((el, i) =>
                 el.value.trim() || DEFAULT_SWITCH_NAMES[i] || `Switch ${i + 1}`
             );
 
             hideAlert(alertEl);
             btn.disabled = true;
-            btn.innerHTML = '<span class="loader-btn"></span> Registering…';
+            btn.innerHTML = '<span class="loader-btn"></span> Activating…';
 
             try {
-                const data = await apiPost('/api/auth/register', {
-                    name, device_id, email, password, num_switches, switch_names
+                const data = await apiPost('/api/auth/claim', {
+                    name, device_id, email, password, switch_names
                 });
                 saveAuth(data);
                 window.location.href = '/dashboard.html';
             } catch (err) {
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;
-                btn.innerHTML = '📡 Register New Device';
+                btn.innerHTML = '🏠 Activate My Device';
             }
         }
+
+        // Allow pressing Enter in the device ID check field
+        document.getElementById('claimDeviceIdInput').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); checkDeviceId(); }
+        });
     </script>
 </body>
 
