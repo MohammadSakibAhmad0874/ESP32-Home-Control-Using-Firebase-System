@@ -165,8 +165,9 @@ bool fetchDeviceToken() {
                 deviceToken = String(token);
                 tokenFetched = true;
                 #if ENABLE_SERIAL_DEBUG
-                Serial.println("☁ Token received successfully!");
-                Serial.printf("  Owner: %s\n", (const char*)doc["name"] | "—");
+                Serial.println("[Cloud] Token received OK!");
+                const char* ownerName = doc["name"] | "Unknown";
+                Serial.printf("  Owner: %s\n", ownerName);
                 #endif
                 return true;
             }

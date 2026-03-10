@@ -1028,15 +1028,27 @@ async def admin_delete_pre_registered(
 
 @app.post("/api/admin/make-admin")
 async def make_admin(
+    secret: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """First user to call this becomes admin. Subsequent calls require existing admin."""
-    # Check if any admin exists
-    result = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
-    existing_admin = result.scalar_one_or_none()
-    if existing_admin and not user.is_admin:
-        raise HTTPException(403, "An admin already exists")
+    """
+    Promote the current user to admin.
+    - If ADMIN_SECRET env var is set and the request provides the matching 'secret' query param → always allowed.
+    - Otherwise: allowed only if no admin exists yet (first-user bootstrap).
+    """
+    admin_secret_env = os.environ.get("ADMIN_SECRET", "")
+
+    if admin_secret_env and secret == admin_secret_env:
+        # Developer using the secret key — always promote
+        pass
+    else:
+        # No secret: only allowed if no admin exists yet
+        result = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
+        existing_admin = result.scalar_one_or_none()
+        if existing_admin and not user.is_admin:
+            raise HTTPException(403, "An admin already exists. Contact your admin or use the admin secret.")
+
     user.is_admin = True
     await db.commit()
     return {"success": True, "message": f"{user.name} is now admin"}
