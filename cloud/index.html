@@ -30,13 +30,14 @@
             <div class="auth-tabs">
                 <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">Login</button>
                 <button class="auth-tab" id="tab-register" onclick="switchTab('register')">Register Device</button>
+                <button class="auth-tab" id="tab-admin" onclick="switchTab('admin')">👑 Admin</button>
             </div>
 
             <!-- Login Form -->
             <form id="loginForm" class="auth-form active" onsubmit="handleLogin(event)">
                 <div class="form-group">
                     <label>Device ID</label>
-                    <input type="text" id="loginDeviceId" placeholder="e.g. SH-001" required autocomplete="username">
+                    <input type="text" id="loginDeviceId" placeholder="e.g. MICKY123" required autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label>Password</label>
@@ -54,7 +55,7 @@
                 </div>
                 <div class="form-group">
                     <label>New Device ID</label>
-                    <input type="text" id="regDeviceId" placeholder="e.g. SH-001 (unique)" required>
+                    <input type="text" id="regDeviceId" placeholder="e.g. MICKY123 (unique)" required>
                 </div>
                 <div class="form-group">
                     <label>Email (for account)</label>
@@ -70,6 +71,23 @@
                 </div>
                 <button type="submit" class="btn btn-primary" id="registerBtn">📱 Register New Device</button>
             </form>
+
+            <!-- Admin Login Form -->
+            <form id="adminForm" class="auth-form" onsubmit="handleAdminLogin(event)">
+                <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px;margin-bottom:16px;font-size:0.85em;color:#f59e0b;">
+                    👑 Admin login uses your email &amp; password — no Device ID needed.
+                </div>
+                <div class="form-group">
+                    <label>Admin Email</label>
+                    <input type="email" id="adminEmail" placeholder="admin@apnaghar.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="adminPassword" placeholder="Enter admin password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-primary" id="adminLoginBtn"
+                    style="background:linear-gradient(135deg,#f59e0b,#d97706);">👑 Login as Admin</button>
+            </form>
         </div>
     </div>
 
@@ -84,7 +102,8 @@
             document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
             document.getElementById('tab-' + tab).classList.add('active');
-            document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
+            const formMap = { login: 'loginForm', register: 'registerForm', admin: 'adminForm' };
+            document.getElementById(formMap[tab]).classList.add('active');
             clearMessages();
         }
 
@@ -163,6 +182,44 @@
                 showError('Cannot connect to server. Is it running?');
                 btn.disabled = false;
                 btn.textContent = '📱 Register New Device';
+            }
+        }
+
+        async function handleAdminLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('adminLoginBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Logging in...';
+            clearMessages();
+
+            const email = document.getElementById('adminEmail').value.trim();
+            const password = document.getElementById('adminPassword').value;
+
+            try {
+                const res = await fetch('/api/auth/admin-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showError(data.detail || 'Admin login failed');
+                    btn.disabled = false;
+                    btn.textContent = '👑 Login as Admin';
+                    return;
+                }
+
+                setToken(data.token);
+                setDeviceId(data.device_id || '');
+                localStorage.setItem('hc_name', data.name);
+                localStorage.setItem('hc_is_admin', '1');
+                showSuccess('✅ Welcome, Admin! Redirecting to admin panel...');
+                setTimeout(() => { window.location.href = '/cloud/admin.html'; }, 1000);
+            } catch (err) {
+                showError('Cannot connect to server. Is it running?');
+                btn.disabled = false;
+                btn.textContent = '👑 Login as Admin';
             }
         }
     </script>

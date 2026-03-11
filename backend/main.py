@@ -180,6 +180,7 @@ async def schedule_executor():
 
 # ── Pre-registered device IDs to auto-seed on startup ────────────────────────
 PRE_REGISTERED_SEEDS = [
+    {"device_id": "SAKIB90",   "label": "Sakib90 Device",   "num_switches": 4},
     # Admin device
     {"device_id": "ADMIN01",   "label": "Admin Device",   "num_switches": 4},
     # Registered user devices
@@ -224,10 +225,54 @@ async def seed_pre_registered_devices():
         print("[Startup] Pre-registered device seeds synced.")
 
 
+async def seed_admin_user():
+    """
+    Auto-create the admin user on first startup if no admin exists yet.
+    Credentials are read from env vars ADMIN_EMAIL and ADMIN_PASSWORD.
+    This means you can always log in to the admin panel without manual DB steps.
+    """
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@apnaghar.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@1234")
+    admin_name = os.environ.get("ADMIN_NAME", "Admin")
+
+    async with AsyncSessionLocal() as db:
+        # Check if any admin already exists
+        result = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
+        existing_admin = result.scalar_one_or_none()
+        if existing_admin:
+            print(f"[Startup] Admin user already exists: {existing_admin.email}")
+            return
+
+        # Check if the email is already registered (non-admin)
+        email_result = await db.execute(select(User).where(User.email == admin_email))
+        existing_user = email_result.scalar_one_or_none()
+        if existing_user:
+            # Just promote them to admin
+            existing_user.is_admin = True
+            await db.commit()
+            print(f"[Startup] Promoted existing user '{admin_email}' to admin.")
+            return
+
+        # Create a standalone admin user (no device required — device_id = None)
+        admin_user = User(
+            id=str(uuid.uuid4()),
+            name=admin_name,
+            email=admin_email,
+            hashed_password=hash_password(admin_password),
+            device_id=None,
+            is_admin=True,
+            created_at=int(time.time()),
+        )
+        db.add(admin_user)
+        await db.commit()
+        print(f"[Startup] ✅ Admin user created: email='{admin_email}' password='{admin_password}'")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_pre_registered_devices()
+    await seed_admin_user()
     # Start the background schedule executor
     task = asyncio.create_task(schedule_executor())
     yield
