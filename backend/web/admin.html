@@ -343,7 +343,21 @@
                 updateStats();
                 renderDevices();
             } catch (err) {
-                showAlert(document.getElementById('alertBox'), `${err.message}. Make sure you are an admin (click "👑 Make Me Admin").`, 'error');
+                const isAuthErr = err.message.includes('403') || err.message.includes('401') || err.message.includes('Admin access');
+                const alertEl = document.getElementById('alertBox');
+                showAlert(alertEl,
+                    isAuthErr
+                        ? `⚠️ Admin access denied — please logout and re-login using the 👑 Admin tab with admin@apnaghar.com.`
+                        : `❌ Failed to load devices: ${err.message}`,
+                    'error'
+                );
+                document.getElementById('statTotal').textContent = '!';
+                document.getElementById('statOnline').textContent = '?';
+                document.getElementById('statOffline').textContent = '?';
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('emptyState').innerHTML = isAuthErr
+                    ? '<div class="empty-icon">🔒</div><h3>Admin Access Required</h3><p>Your session may be expired. Please <a href="/index.html" style="color:var(--accent-2)">logout and re-login</a> using the 👑 Admin tab.</p>'
+                    : '<div class="empty-icon">❌</div><h3>Could not load devices</h3><p>' + err.message + '</p>';
             } finally {
                 document.getElementById('loadingState').style.display = 'none';
             }
