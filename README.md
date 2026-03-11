@@ -1,20 +1,25 @@
-# 🏠 Smart Home Automation System v1.3
+# 🏠 ApnaGhar — Smart Home Control System
 
-A custom ESP32-based platform for controlling home electrical switches via WiFi — **zero-code setup**, **local hotspot control**, and **cloud access from anywhere in the world**.
+> **Apna Ghar, Apna Control — Smart Home, Your Way**
+
+A custom ESP32-based platform for controlling home switches via WiFi — **zero-code setup**, **real-time WebSocket control**, and **cloud access from anywhere in the world**.
+
+---
 
 ## ✨ Features
 
-- 📱 **WiFi Setup Wizard** - Configure WiFi from your phone, no code changes needed
-- 📡 **Always-On Hotspot** - ESP32 creates its own WiFi (`SmartHome_Control`) — connect from ANY device!
-- ☁️ **Cloud Dashboard** - Control from **anywhere in the world** via `https://apnaghar-3f865.web.app`
-- 🔐 **Login System** - Unique Device ID + password authentication
-- 👑 **Admin Panel** - Monitor and control ALL devices from one place
-- 🔄 **AP+STA Dual Mode** - Connected to WiFi AND broadcasting its own hotspot
-- 📱 **Beautiful Web Interface** - Modern, responsive dark theme on all pages
-- 🔄 **Real-time Updates** - Instant status feedback (local + cloud)
-- 💾 **State Persistence** - Remembers switch states and WiFi after power loss
-- ⚙️ **Settings Page** - Change WiFi network or factory reset anytime
-- 🔒 **Secure** - Firebase Authentication, HTTPS
+- 📱 **WiFi Setup Wizard** — Configure WiFi from your phone, no code needed
+- 📡 **Always-On Hotspot** — ESP32 broadcasts `SmartHome_Control` WiFi for direct access
+- ☁️ **Cloud Dashboard** — Control from **anywhere** via Railway-hosted backend
+- 🔐 **Login / Device Claim Flow** — Unique Device ID + password authentication
+- 👑 **Admin Panel** — Monitor and control ALL devices from one place
+- ⚡ **Real-time WebSocket** — Instant switch state updates, no polling
+- 📊 **Power Usage Tracker** — kWh estimator with per-switch wattage and cost (₹)
+- ⏰ **Automation Schedules** — Time-based ON/OFF rules with day-of-week selection
+- 🔄 **AP+STA Dual Mode** — Home WiFi + own hotspot at the same time
+- 💾 **State Persistence** — Remembers all switch states after power loss
+- 🟢 **Smart Online/Offline Status** — IP address hidden when device is offline (shows `—`)
+- 🔒 **Secure** — JWT auth, HTTPS on all endpoints
 
 ## 🛠 Hardware Requirements
 
@@ -26,116 +31,96 @@ A custom ESP32-based platform for controlling home electrical switches via WiFi 
 
 ## 🚀 Quick Start
 
-1. **Hardware Setup** - See [Hardware Setup Guide](docs/hardware_setup.md)
-2. **Upload Firmware** - Upload `HomeControlSketch/` files via Arduino IDE
-3. **Connect to Setup WiFi** - On your phone, connect to WiFi `SmartHome_Setup` (password: `12345678`)
-4. **Setup Wizard Opens** - Pick your home WiFi network and enter the password
-5. **Done!** - The ESP32 connects to your WiFi and creates a **hotspot** for any device to connect
-6. **Access from ANY device** ↓
-   
-### 📡 Access from Any Phone / Laptop / Tablet
+1. **Hardware Setup** — See [Hardware Setup Guide](docs/hardware_setup.md)
+2. **Upload Firmware** — Flash `firmware/HomeControlSketch.ino` via Arduino IDE
+3. **Connect to Setup WiFi** — Connect your phone to `SmartHome_Setup` (password: `12345678`)
+4. **Setup Wizard Opens** — Pick your home WiFi and enter the password
+5. **Done!** — ESP32 joins your WiFi and keeps its own hotspot running
+
+### 📡 Access from Any Phone / Laptop / Tablet (Local)
 
 | Step | Action |
 |------|--------|
-| 1️⃣ | On your phone/laptop, connect to WiFi: **`SmartHome_Control`** (password: `12345678`) |
-| 2️⃣ | Open browser and go to: **`http://192.168.4.1`** |
-| 3️⃣ | Done! Control your switches 🎉 |
-
-> **No code editing required!** Everything is configured through the web interface.
->
-> **Works everywhere!** The ESP32 creates its own WiFi hotspot — no need to be on the same network. Just connect to `SmartHome_Control` and open `192.168.4.1`.
+| 1️⃣ | Connect to WiFi: **`SmartHome_Control`** (password: `12345678`) |
+| 2️⃣ | Open browser → **`http://192.168.4.1`** |
+| 3️⃣ | Done! Control switches 🎉 |
 
 ---
 
-## ☁️ Cloud Setup (Control from Anywhere in the World)
+## ☁️ Deployment Architecture
 
-### Step 1: Firebase Login (One-time)
+| Service | Role | URL |
+|---------|------|-----|
+| **Railway** | Python/FastAPI backend + WebSocket server | `https://esp32-home-control-using-firebase-system-production.up.railway.app` |
+| **Vercel** | Static frontend hosting | `https://apna-ghar-sooty.vercel.app` |
 
-```bash
-cd C:\Users\Ghosty\Desktop\HomeControl
-firebase login
-```
-A browser window opens → login with your Google account.
+### 🚂 Railway (Backend)
 
-### Step 2: Enable Realtime Database
+The backend runs on Railway and handles:
+- REST API (`/api/auth`, `/api/devices`, `/api/admin`)
+- WebSocket connections for real-time device control
+- SQLite database for device/user/schedule storage
 
-1. Go to **https://console.firebase.google.com** → open your project
-2. **Build → Realtime Database → Create Database**
-3. Select any location → **Start in test mode** → Enable
-
-### Step 3: Deploy the Web App
+To redeploy: push to the `main` branch and Railway auto-deploys.
 
 ```bash
-firebase deploy
+git add .
+git commit -m "your message"
+git push origin main
 ```
-You'll get a URL like: **`https://apnaghar-3f865.web.app`**
 
-### Step 4: Register Your Device
+### ▲ Vercel (Frontend)
 
-1. Open the deployed URL on any phone/laptop
-2. Click **Register Device** tab
-3. Fill in: Name, Device ID (`SH-001`), Email, Password, Switches (`4`)
-4. Click **Register** → Dashboard opens!
+The `web/` folder is deployed to Vercel as a static site.
 
-### Step 5: Upload ESP32 Firmware
+To redeploy: push to `main` — Vercel auto-deploys from the connected GitHub repo.
 
-1. Install **ArduinoJson** library: `Sketch → Include Library → Manage Libraries → search "ArduinoJson" → Install`
-2. Open `HomeControlSketch/HomeControlSketch.ino`
-3. Click **Upload**
-4. Serial Monitor should show: `☁ Firebase Cloud Sync active!`
+### Step: Register Your Device
 
-### Step 6: Control from Anywhere! 🌍
+1. Open the Vercel URL on any phone/laptop
+2. Click **Claim Your Device** tab
+3. Enter your Device ID → set name, email, password
+4. Dashboard opens! ✅
 
-| What | URL |
-|------|-----|
-| **Cloud Dashboard** (global) | `https://apnaghar-3f865.web.app` |
-| **Admin Panel** | `https://apnaghar-3f865.web.app/admin.html` |
-| **Local Hotspot** | Connect to `SmartHome_Control` WiFi → `http://192.168.4.1` |
+### Step: Upload ESP32 Firmware
+
+1. Open `firmware/HomeControlSketch.ino` in Arduino IDE
+2. Set your WiFi credentials in the Captive Portal (no code edit needed)
+3. Click **Upload** → Serial Monitor confirms connection
 
 ---
 
 ## 📖 Documentation
 
-- [Hardware Setup](docs/hardware_setup.md) - Wiring and safety guidelines
-- [Installation Guide](docs/installation_guide.md) - Step-by-step firmware installation
-- [WiFi Setup Guide](docs/wifi_setup.md) - How to configure WiFi through the wizard
-- [Network Access](docs/network_access.md) - Access from any device on your network
-- [User Manual](docs/user_manual.md) - How to use the system
-- [Voice Integration](docs/voice_integration.md) - Google Assistant setup
-- [Remote Access](docs/remote_access.md) - Control from anywhere
+- [Hardware Setup](docs/hardware_setup.md) — Wiring and safety guidelines
+- [WiFi Setup Guide](docs/wifi_setup.md) — Configure WiFi through the wizard
 
 ## 🎯 Project Structure
 
 ```
 HomeControl/
-├── cloud/                 # ☁️ Cloud web app (Firebase hosted)
-│   ├── index.html         # Login / Register page
-│   ├── dashboard.html     # Remote switch control
+├── web/                   # 🌐 Frontend (Vercel-hosted)
+│   ├── index.html         # Login / Claim Device page
+│   ├── dashboard.html     # Switch control + schedules + power
 │   ├── admin.html         # Admin panel (all devices)
 │   ├── style.css          # Design system
-│   ├── app.js             # App logic
-│   └── firebase-config.js # Firebase credentials
-├── HomeControlSketch/     # ESP32 Arduino code
+│   └── app.js             # Shared API/auth helpers
+├── backend/               # ⚙️ Python FastAPI backend (Railway)
+│   ├── main.py            # Entry point — API routes + WebSocket
+│   └── web/               # Served static fallback copy
+├── firmware/              # 🔧 ESP32 Arduino firmware
 │   ├── HomeControlSketch.ino
-│   ├── config.h
-│   ├── firebaseSync.h     # ← Cloud sync module
-│   ├── relayControl.h
-│   └── wifiManager.h
-├── firmware/              # Backup copy of firmware
-├── firebase.json          # Firebase hosting config
+│   └── firebaseSync.h
+├── cloud/                 # 🗂️ Legacy cloud version
 └── docs/                  # Documentation
 ```
 
-## 🔧 Customization
+## 🔄 Changelog
 
-- **WiFi Settings**: Configured automatically through the setup wizard!
-- **Hotspot Name**: Change `HOTSPOT_SSID` in `config.h` (default: `SmartHome_Control`)
-- **Hotspot Password**: Change `HOTSPOT_PASSWORD` in `config.h` (default: `12345678`)
-- **Device ID**: Change `DEVICE_ID` in `firebaseSync.h` (must match registration)
-- **Firebase Project**: Update `firebase-config.js` and `firebaseSync.h` with your Firebase credentials
-- **Switch Names**: Edit labels in `config.h`
-- **GPIO Pins**: Change pin mappings in `config.h`
-- **AP Settings**: Change setup portal name/password in `config.h`
+### Latest
+- 🟢 **Offline IP fix** — IP field now shows `—` when device is offline (was showing stale cached IP)
+- ⏰ **Schedules** — Automation with day-of-week selection
+- 📊 **Power Usage** — kWh tracker per switch with cost estimates
 
 ## ⚠️ Safety Warning
 
@@ -147,8 +132,8 @@ This project controls mains electricity. Always:
 
 ## 📝 License
 
-Open source - use and modify as you wish!
+Open source — use and modify as you wish!
 
 ---
 
-**Built with ❤️ for complete control of your smart home**
+**Built with ❤️ for complete control of your smart home — ApnaGhar**

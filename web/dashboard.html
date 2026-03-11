@@ -751,7 +751,7 @@
         function renderDevice(device) {
             currentRelays = device.relays || {};
             setOnlineStatus(device.online);
-            document.getElementById('infoIp').textContent = device.ip_address || '—';
+            document.getElementById('infoIp').textContent = device.online ? (device.ip_address || '—') : '—';
             lastSeenTs = device.last_seen;
             renderRelays();
         }

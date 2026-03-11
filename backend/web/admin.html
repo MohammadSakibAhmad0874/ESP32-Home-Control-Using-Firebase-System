@@ -408,7 +408,7 @@
                   </span>
                 </div>
                 <p>${device.owner_name} &middot; ${device.email || '—'} &middot;
-                   IP: ${device.ip_address || '—'} &middot;
+                   IP: ${device.online ? (device.ip_address || '—') : '—'} &middot;
                    Last: ${timeAgo(device.last_seen)}</p>
               </div>
             </div>

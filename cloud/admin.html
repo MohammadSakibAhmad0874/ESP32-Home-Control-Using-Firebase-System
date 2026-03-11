@@ -127,7 +127,7 @@
                     </div>
                 </div>
                 <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
-                    📧 ${d.email} &nbsp;|&nbsp; 🕐 Last seen: ${getTimeAgo(d.last_seen)} &nbsp;|&nbsp; 📍 ${d.ip_address || 'unknown IP'}
+                    📧 ${d.email} &nbsp;|&nbsp; 🕐 Last seen: ${getTimeAgo(d.last_seen)} &nbsp;|&nbsp; 📍 ${d.online ? (d.ip_address || 'unknown IP') : '—'}
                 </div>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;">
                     ${Object.entries(d.relays || {}).map(([key, r]) => `
