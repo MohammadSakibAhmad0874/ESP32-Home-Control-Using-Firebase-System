@@ -83,17 +83,13 @@
                 <!-- Alert -->
                 <div class="alert" id="alertBox"></div>
 
+                <!-- ── Login Panel ── -->
                 <div class="tab-panel active" id="panel-login">
                     <form id="loginForm" onsubmit="handleLogin(event)">
-                        <!-- Device ID field (normal users) -->
-                        <div class="form-group" id="fieldDeviceId">
+                        <div class="form-group">
                             <label for="loginDeviceId">Device ID</label>
-                            <input type="text" id="loginDeviceId" placeholder="e.g. MICKY123" autocomplete="username">
-                        </div>
-                        <!-- Email field (admin login mode) -->
-                        <div class="form-group" id="fieldEmail" style="display:none">
-                            <label for="loginEmail">Admin Email</label>
-                            <input type="email" id="loginEmail" placeholder="admin@example.com" autocomplete="email">
+                            <input type="text" id="loginDeviceId" placeholder="e.g. MICKY123" autocomplete="username"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="loginPassword">Password</label>
@@ -104,15 +100,6 @@
                             🔑 Login to Dashboard
                         </button>
                     </form>
-                    <!-- Admin login toggle -->
-                    <div style="text-align:center;margin-top:14px">
-                        <a href="#" id="adminToggleLink" onclick="toggleAdminMode(event)"
-                            style="font-size:0.82em;color:var(--text-3);text-decoration:none;transition:color .2s"
-                            onmouseover="this.style.color='var(--accent-2)'"
-                            onmouseout="this.style.color='var(--text-3)'">
-                            🔐 Admin? Login with email
-                        </a>
-                    </div>
                 </div>
 
                 <!-- ── Admin Login Panel ── -->
@@ -149,17 +136,16 @@
                             Enter the <strong>Device ID</strong> that was provided to you (printed on the device box or
                             given by your admin).
                         </p>
-                        <div class="form-group" style="display:flex;gap:8px;align-items:flex-end">
-                            <div style="flex:1">
-                                <label for="claimDeviceIdInput">Device ID</label>
-                                <input type="text" id="claimDeviceIdInput" placeholder="e.g. SAKIB7860"
-                                    style="text-transform:uppercase" autocomplete="off">
-                            </div>
-                            <button class="btn btn-primary" type="button" id="checkDeviceBtn" onclick="checkDeviceId()"
-                                style="white-space:nowrap;padding:10px 18px">
-                                ✔ Check ID
-                            </button>
+                        <div class="form-group">
+                            <label for="claimDeviceIdInput">Device ID</label>
+                            <input type="text" id="claimDeviceIdInput" placeholder="e.g. MICK345"
+                                style="text-transform:uppercase;width:100%;letter-spacing:1px;font-weight:600;color:#f0f0f8"
+                                autocomplete="off">
                         </div>
+                        <button class="btn btn-primary" type="button" id="checkDeviceBtn" onclick="checkDeviceId()"
+                            style="margin-top:4px">
+                            ✔ Check ID
+                        </button>
                         <div id="checkStatus" style="margin-top:10px;font-size:0.88em"></div>
                     </div>
 
@@ -215,7 +201,7 @@
     <script>
         // Redirect if already logged in
         if (getToken()) {
-            window.location.href = isAdmin() ? '/admin.html' : '/dashboard.html';
+            window.location.href = isAdmin() ? '/admin' : '/dashboard.html';
         }
 
         const DEFAULT_SWITCH_NAMES = ['Living Room', 'Bedroom', 'Kitchen', 'Fan',
@@ -229,49 +215,25 @@
             hideAlert(document.getElementById('alertBox'));
         }
 
-        // ── Login Mode Toggle (normal user ↔ admin email) ──────────────────
-        let _adminMode = false;
-
-        function toggleAdminMode(e) {
-            e.preventDefault();
-            _adminMode = !_adminMode;
-            document.getElementById('fieldDeviceId').style.display = _adminMode ? 'none' : 'block';
-            document.getElementById('fieldEmail').style.display = _adminMode ? 'block' : 'none';
-            document.getElementById('adminToggleLink').textContent =
-                _adminMode ? '← Back to Device ID login' : '🔐 Admin? Login with email';
-            document.getElementById('loginBtn').innerHTML =
-                _adminMode ? '🛡 Admin Login' : '🔑 Login to Dashboard';
-            hideAlert(document.getElementById('alertBox'));
-        }
-
         async function handleLogin(e) {
             e.preventDefault();
             const alertEl = document.getElementById('alertBox');
             const btn = document.getElementById('loginBtn');
+            const deviceId = document.getElementById('loginDeviceId').value.trim().toUpperCase();
+            const password = document.getElementById('loginPassword').value;
 
             hideAlert(alertEl);
             btn.disabled = true;
             btn.innerHTML = '<span class="loader-btn"></span> Logging in…';
 
             try {
-                let data;
-                if (_adminMode) {
-                    const email = document.getElementById('loginEmail').value.trim();
-                    const password = document.getElementById('loginPassword').value;
-                    if (!email) throw new Error('Please enter your admin email.');
-                    data = await apiPost('/api/auth/admin-login', { email, password });
-                } else {
-                    const deviceId = document.getElementById('loginDeviceId').value.trim().toUpperCase();
-                    const password = document.getElementById('loginPassword').value;
-                    if (!deviceId) throw new Error('Please enter your Device ID.');
-                    data = await apiPost('/api/auth/login', { device_id: deviceId, password });
-                }
+                const data = await apiPost('/api/auth/login', { device_id: deviceId, password });
                 saveAuth(data);
-                window.location.href = data.is_admin ? '/admin.html' : '/dashboard.html';
+                window.location.href = data.is_admin ? '/admin' : '/dashboard.html';
             } catch (err) {
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;
-                btn.innerHTML = _adminMode ? '🛡 Admin Login' : '🔑 Login to Dashboard';
+                btn.innerHTML = '🔑 Login to Dashboard';
             }
         }
 
@@ -289,7 +251,7 @@
             try {
                 const data = await apiPost('/api/auth/admin-login', { email, password });
                 saveAuth(data);
-                window.location.href = '/admin.html';
+                window.location.href = '/admin';
             } catch (err) {
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;
@@ -298,6 +260,7 @@
         }
 
         // ── Claim Device Flow ─────────────────────────────────────────────────
+
 
         let verifiedDeviceInfo = null;  // Stores { device_id, num_switches } from check
 

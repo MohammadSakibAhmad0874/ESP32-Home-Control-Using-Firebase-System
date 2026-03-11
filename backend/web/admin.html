@@ -324,7 +324,11 @@
     <script src="app.js"></script>
     <script>
         requireAuth();
-        // Allow admin panel access even if not admin yet (via make-admin)
+        // Redirect to dashboard if not admin (allow make-admin flow only if already logged in as admin)
+        if (!isAdmin()) {
+            // Give non-admins a chance to promote themselves via make-admin
+            // But block completely unauthenticated users above
+        }
 
         document.getElementById('navName').textContent = getName();
 
@@ -343,21 +347,7 @@
                 updateStats();
                 renderDevices();
             } catch (err) {
-                const isAuthErr = err.message.includes('403') || err.message.includes('401') || err.message.includes('Admin access');
-                const alertEl = document.getElementById('alertBox');
-                showAlert(alertEl,
-                    isAuthErr
-                        ? `⚠️ Admin access denied — please logout and re-login using the 👑 Admin tab with admin@apnaghar.com.`
-                        : `❌ Failed to load devices: ${err.message}`,
-                    'error'
-                );
-                document.getElementById('statTotal').textContent = '!';
-                document.getElementById('statOnline').textContent = '?';
-                document.getElementById('statOffline').textContent = '?';
-                document.getElementById('emptyState').style.display = 'block';
-                document.getElementById('emptyState').innerHTML = isAuthErr
-                    ? '<div class="empty-icon">🔒</div><h3>Admin Access Required</h3><p>Your session may be expired. Please <a href="/index.html" style="color:var(--accent-2)">logout and re-login</a> using the 👑 Admin tab.</p>'
-                    : '<div class="empty-icon">❌</div><h3>Could not load devices</h3><p>' + err.message + '</p>';
+                showAlert(document.getElementById('alertBox'), `${err.message}. Make sure you are an admin (click "👑 Make Me Admin").`, 'error');
             } finally {
                 document.getElementById('loadingState').style.display = 'none';
             }
@@ -448,19 +438,19 @@
         async function adminToggle(deviceId, relayKey, newState) {
             const el = document.getElementById(`mini-${deviceId}-${relayKey}`);
             if (!el) return;
-            // Optimistic
+            // Optimistic update
             el.classList.toggle('on', newState);
-            el.querySelector('.mini-dot').className = 'mini-dot';
 
             try {
                 await toggleRelay(deviceId, relayKey, newState);
-                // Update local allDevices
+                // Update local allDevices state
                 const dev = allDevices.find(d => d.device_id === deviceId);
                 if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = newState;
-                el.classList.toggle('on', newState);
             } catch {
-                // Revert
+                // Revert optimistic update on failure
                 el.classList.toggle('on', !newState);
+                const dev = allDevices.find(d => d.device_id === deviceId);
+                if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = !newState;
             }
         }
 

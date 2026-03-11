@@ -201,7 +201,7 @@
     <script>
         // Redirect if already logged in
         if (getToken()) {
-            window.location.href = isAdmin() ? '/admin.html' : '/dashboard.html';
+            window.location.href = isAdmin() ? '/admin' : '/dashboard.html';
         }
 
         const DEFAULT_SWITCH_NAMES = ['Living Room', 'Bedroom', 'Kitchen', 'Fan',
@@ -229,7 +229,7 @@
             try {
                 const data = await apiPost('/api/auth/login', { device_id: deviceId, password });
                 saveAuth(data);
-                window.location.href = data.is_admin ? '/admin.html' : '/dashboard.html';
+                window.location.href = data.is_admin ? '/admin' : '/dashboard.html';
             } catch (err) {
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;
@@ -251,7 +251,7 @@
             try {
                 const data = await apiPost('/api/auth/admin-login', { email, password });
                 saveAuth(data);
-                window.location.href = '/admin.html';
+                window.location.href = '/admin';
             } catch (err) {
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;

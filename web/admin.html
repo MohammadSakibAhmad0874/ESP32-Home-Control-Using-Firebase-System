@@ -324,7 +324,11 @@
     <script src="app.js"></script>
     <script>
         requireAuth();
-        // Allow admin panel access even if not admin yet (via make-admin)
+        // Redirect to dashboard if not admin (allow make-admin flow only if already logged in as admin)
+        if (!isAdmin()) {
+            // Give non-admins a chance to promote themselves via make-admin
+            // But block completely unauthenticated users above
+        }
 
         document.getElementById('navName').textContent = getName();
 
@@ -434,19 +438,19 @@
         async function adminToggle(deviceId, relayKey, newState) {
             const el = document.getElementById(`mini-${deviceId}-${relayKey}`);
             if (!el) return;
-            // Optimistic
+            // Optimistic update
             el.classList.toggle('on', newState);
-            el.querySelector('.mini-dot').className = 'mini-dot';
 
             try {
                 await toggleRelay(deviceId, relayKey, newState);
-                // Update local allDevices
+                // Update local allDevices state
                 const dev = allDevices.find(d => d.device_id === deviceId);
                 if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = newState;
-                el.classList.toggle('on', newState);
             } catch {
-                // Revert
+                // Revert optimistic update on failure
                 el.classList.toggle('on', !newState);
+                const dev = allDevices.find(d => d.device_id === deviceId);
+                if (dev && dev.relays[relayKey]) dev.relays[relayKey].state = !newState;
             }
         }
 

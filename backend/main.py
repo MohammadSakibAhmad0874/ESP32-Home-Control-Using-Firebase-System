@@ -102,9 +102,9 @@ async def schedule_executor():
     while True:
         await asyncio.sleep(30)
         try:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             current_time = now.strftime("%H:%M")
-            current_day = DAY_MAP[now.weekday()]
+            current_day  = DAY_MAP[now.weekday()]
 
             # Reset fired set at the top of a new minute
             if current_time != last_minute:
@@ -1285,12 +1285,17 @@ async def dashboard_websocket(
 
     try:
         while True:
-            # Keep connection alive — browser can send pings
-            await asyncio.sleep(30)
+            # Wait for any message from the browser (ping / keep-alive).
+            # Use a 35-second timeout; if nothing arrives, send a server-side ping.
             try:
-                await websocket.send_text(json.dumps({"type": "ping"}))
-            except Exception:
-                break
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=35)
+                # Browser can send {"type": "ping"} or any keep-alive message — just ignore it
+            except asyncio.TimeoutError:
+                # No message received — send a ping to keep the connection alive
+                try:
+                    await websocket.send_text(json.dumps({"type": "ping"}))
+                except Exception:
+                    break
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
     finally:
