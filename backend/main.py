@@ -227,45 +227,77 @@ async def seed_pre_registered_devices():
 
 async def seed_admin_user():
     """
-    Auto-create the admin user on first startup if no admin exists yet.
-    Credentials are read from env vars ADMIN_EMAIL and ADMIN_PASSWORD.
-    This means you can always log in to the admin panel without manual DB steps.
+    Manages the admin user on every startup:
+    1. If ADMIN_EMAIL + ADMIN_PASSWORD env vars are SET  → find that admin and
+       reset their password (useful for forgotten passwords).
+    2. If no admin exists at all                         → create one from env vars.
+    3. If an admin exists but env vars are at defaults   → just log and skip.
     """
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@apnaghar.com")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@1234")
-    admin_name = os.environ.get("ADMIN_NAME", "Admin")
+    admin_email    = os.environ.get("ADMIN_EMAIL", "")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "")
+    admin_name     = os.environ.get("ADMIN_NAME", "Admin")
 
     async with AsyncSessionLocal() as db:
-        # Check if any admin already exists
-        result = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
-        existing_admin = result.scalar_one_or_none()
+        # ── Case 1: env vars explicitly set → reset/create with those creds ──
+        if admin_email and admin_password:
+            # Try to find an existing user with that email
+            result = await db.execute(select(User).where(User.email == admin_email))
+            target = result.scalar_one_or_none()
+
+            if target:
+                # User exists — promote to admin + reset password
+                target.is_admin = True
+                target.hashed_password = hash_password(admin_password)
+                await db.commit()
+                print(f"[Startup] ✅ Admin password reset for '{admin_email}'")
+                return
+
+            # Check if any other admin exists already (don't create a duplicate)
+            any_admin = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
+            if any_admin.scalar_one_or_none():
+                # Different email — just reset the ONE matching the env var email
+                # (user not found above, so nothing to reset; just warn)
+                print(f"[Startup] ⚠ ADMIN_EMAIL='{admin_email}' not found in DB.")
+                print( "[Startup]   Set ADMIN_EMAIL to an existing user's email to reset their password.")
+                return
+
+            # No admin at all — create fresh
+            new_admin = User(
+                id=str(uuid.uuid4()),
+                name=admin_name,
+                email=admin_email,
+                hashed_password=hash_password(admin_password),
+                device_id=None,
+                is_admin=True,
+                created_at=int(time.time()),
+            )
+            db.add(new_admin)
+            await db.commit()
+            print(f"[Startup] ✅ Admin user created: email='{admin_email}' password='{admin_password}'")
+            return
+
+        # ── Case 2: env vars not set — only create if NO admin exists ──────
+        any_admin = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
+        existing_admin = any_admin.scalar_one_or_none()
         if existing_admin:
             print(f"[Startup] Admin user already exists: {existing_admin.email}")
             return
 
-        # Check if the email is already registered (non-admin)
-        email_result = await db.execute(select(User).where(User.email == admin_email))
-        existing_user = email_result.scalar_one_or_none()
-        if existing_user:
-            # Just promote them to admin
-            existing_user.is_admin = True
-            await db.commit()
-            print(f"[Startup] Promoted existing user '{admin_email}' to admin.")
-            return
-
-        # Create a standalone admin user (no device required — device_id = None)
-        admin_user = User(
+        # Create a default admin (first-time setup fallback)
+        default_email    = "admin@apnaghar.com"
+        default_password = "Admin@1234"
+        new_admin = User(
             id=str(uuid.uuid4()),
-            name=admin_name,
-            email=admin_email,
-            hashed_password=hash_password(admin_password),
+            name="Admin",
+            email=default_email,
+            hashed_password=hash_password(default_password),
             device_id=None,
             is_admin=True,
             created_at=int(time.time()),
         )
-        db.add(admin_user)
+        db.add(new_admin)
         await db.commit()
-        print(f"[Startup] ✅ Admin user created: email='{admin_email}' password='{admin_password}'")
+        print(f"[Startup] ✅ Default admin created: email='{default_email}' password='{default_password}'")
 
 
 @asynccontextmanager
