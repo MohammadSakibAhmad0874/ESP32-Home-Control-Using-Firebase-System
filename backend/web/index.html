@@ -77,6 +77,7 @@
                 <div class="tabs">
                     <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">Login</button>
                     <button class="tab-btn" id="tab-register" onclick="switchTab('register')">Claim Your Device</button>
+                    <button class="tab-btn" id="tab-admin" onclick="switchTab('admin')" style="color:#a78bfa;">👑 Admin</button>
                 </div>
 
                 <!-- Alert -->
@@ -112,6 +113,31 @@
                             🔐 Admin? Login with email
                         </a>
                     </div>
+                </div>
+
+                <!-- ── Admin Login Panel ── -->
+                <div class="tab-panel" id="panel-admin">
+                    <div style="background:rgba(109,93,252,0.08);border:1px solid rgba(109,93,252,0.25);border-radius:10px;padding:12px 14px;margin-bottom:18px;display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:20px">👑</span>
+                        <div>
+                            <div style="font-size:12px;font-weight:600;color:#a78bfa;margin-bottom:2px;">Admin Access</div>
+                            <div style="font-size:11px;color:var(--text-3);">Full control over all devices &amp; users</div>
+                        </div>
+                    </div>
+                    <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
+                        <div class="form-group">
+                            <label for="adminDeviceId">Admin Device ID</label>
+                            <input type="text" id="adminDeviceId" placeholder="e.g. MICKY123" autocomplete="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="adminPassword">Password</label>
+                            <input type="password" id="adminPassword" placeholder="Enter your password" autocomplete="current-password" required>
+                        </div>
+                        <button class="btn btn-primary" type="submit" id="adminLoginBtn"
+                            style="background:linear-gradient(135deg,#6d5dfc,#a78bfa);">
+                            👑 Login as Admin
+                        </button>
+                    </form>
                 </div>
 
                 <!-- ── Claim Panel ── -->
@@ -246,6 +272,34 @@
                 showAlert(alertEl, err.message, 'error');
                 btn.disabled = false;
                 btn.innerHTML = _adminMode ? '🛡 Admin Login' : '🔑 Login to Dashboard';
+            }
+        }
+
+        async function handleAdminLogin(e) {
+            e.preventDefault();
+            const alertEl = document.getElementById('alertBox');
+            const btn = document.getElementById('adminLoginBtn');
+            const deviceId = document.getElementById('adminDeviceId').value.trim().toUpperCase();
+            const password = document.getElementById('adminPassword').value;
+
+            hideAlert(alertEl);
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loader-btn"></span> Verifying…';
+
+            try {
+                const data = await apiPost('/api/auth/login', { device_id: deviceId, password });
+                if (!data.is_admin) {
+                    showAlert(alertEl, '⛔ This account does not have admin privileges.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '👑 Login as Admin';
+                    return;
+                }
+                saveAuth(data);
+                window.location.href = '/admin.html';
+            } catch (err) {
+                showAlert(alertEl, err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = '👑 Login as Admin';
             }
         }
 
