@@ -126,8 +126,8 @@
                     </div>
                     <form id="adminLoginForm" onsubmit="handleAdminLogin(event)">
                         <div class="form-group">
-                            <label for="adminDeviceId">Admin Device ID</label>
-                            <input type="text" id="adminDeviceId" placeholder="e.g. MICKY123" autocomplete="username" required>
+                            <label for="adminEmail">Admin Email</label>
+                            <input type="email" id="adminEmail" placeholder="admin@apnaghar.com" autocomplete="email" required>
                         </div>
                         <div class="form-group">
                             <label for="adminPassword">Password</label>
@@ -279,7 +279,7 @@
             e.preventDefault();
             const alertEl = document.getElementById('alertBox');
             const btn = document.getElementById('adminLoginBtn');
-            const deviceId = document.getElementById('adminDeviceId').value.trim().toUpperCase();
+            const email = document.getElementById('adminEmail').value.trim();
             const password = document.getElementById('adminPassword').value;
 
             hideAlert(alertEl);
@@ -287,13 +287,7 @@
             btn.innerHTML = '<span class="loader-btn"></span> Verifying…';
 
             try {
-                const data = await apiPost('/api/auth/login', { device_id: deviceId, password });
-                if (!data.is_admin) {
-                    showAlert(alertEl, '⛔ This account does not have admin privileges.', 'error');
-                    btn.disabled = false;
-                    btn.innerHTML = '👑 Login as Admin';
-                    return;
-                }
+                const data = await apiPost('/api/auth/admin-login', { email, password });
                 saveAuth(data);
                 window.location.href = '/admin.html';
             } catch (err) {
