@@ -25,7 +25,7 @@
 #include <ESPmDNS.h>
 #endif
 
-#include "firebaseSync.h"
+#include "serverSync.h"   // WebSocket sync with Railway backend
 
 WebServer server(WEB_SERVER_PORT);
 
@@ -86,7 +86,8 @@ void setup() {
   // Start mDNS for device discovery (only when connected to WiFi)
   if (!portalActive && wifiConnected) {
     startMDNS();
-    // Start Firebase cloud sync
+    // Sync time + connect to HomeControl server via WebSocket
+    initNTP();
     initFirebaseSync();
   }
   
@@ -136,7 +137,7 @@ void loop() {
   // Handle DNS for captive portal
   handlePortalDNS();
   
-  // Firebase cloud sync (poll for remote commands)
+  // HomeControl server sync (WebSocket keep-alive + heartbeats)
   cloudSyncLoop();
   
   // Check WiFi connection (reconnect if lost)
@@ -319,17 +320,11 @@ void handleSaveWiFi() {
     String ip = WiFi.localIP().toString();
     String hostname = String(MDNS_HOSTNAME) + ".local";
     
-    // Start the always-on hotspot
+    // Start the always-on hotspot first (fast)
     #if ENABLE_ALWAYS_ON_AP
     startAlwaysOnAP();
     String hotspotIP = WiFi.softAPIP().toString();
     #endif
-    
-    // Start mDNS for device discovery
-    startMDNS();
-    
-    // Start Firebase cloud sync
-    initFirebaseSync();
     
     #if ENABLE_SERIAL_DEBUG
     Serial.println("\n✓ Connected! WiFi IP: " + ip);
@@ -340,16 +335,24 @@ void handleSaveWiFi() {
     #endif
     #endif
     
-    // Send success response with IP, hostname, and hotspot info
+    // ✅ Send success response IMMEDIATELY before slow init tasks
+    // (mDNS/NTP/WebSocket can delay this enough to cause browser timeout)
     String response = "{\"success\":true,\"ip\":\"" + ip + "\",\"hostname\":\"" + hostname + "\"";
     #if ENABLE_ALWAYS_ON_AP
     response += ",\"hotspot\":\"" + String(HOTSPOT_SSID) + "\",\"hotspotIP\":\"" + hotspotIP + "\"";
     #endif
     response += "}";
     server.send(200, "application/json", response);
+    server.handleClient();  // flush the response
+    
+    // Now do the slow tasks after responding
+    delay(200);
+    startMDNS();
+    initNTP();
+    initFirebaseSync();
     
     // Restart the web server on the new network
-    delay(1000);
+    delay(500);
     server.begin();
   } else {
     #if ENABLE_SERIAL_DEBUG

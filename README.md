@@ -52,7 +52,7 @@ A custom ESP32-based platform for controlling home switches via WiFi — **zero-
 | Service | Role | URL |
 |---------|------|-----|
 | **Railway** | Python/FastAPI backend + WebSocket server | `https://esp32-home-control-using-firebase-system-production.up.railway.app` |
-| **Vercel** | Static frontend hosting | `https://apna-ghar-sooty.vercel.app` |
+| **Vercel** | Static frontend hosting | `https://web-iota-ruddy-37.vercel.app` |
 
 ### 🚂 Railway (Backend)
 

@@ -42,7 +42,7 @@ void startMDNS() {
   #if ENABLE_MDNS
   if (MDNS.begin(MDNS_HOSTNAME)) {
     // Advertise the HTTP service so devices can discover it
-    MDNS.addService("http", "tcp", WEB_SERVER_PORT);
+    MDNS.addService("http", "tcp", (uint16_t)WEB_SERVER_PORT);
     
     #if ENABLE_SERIAL_DEBUG
     Serial.println("\n✓ mDNS started!");
