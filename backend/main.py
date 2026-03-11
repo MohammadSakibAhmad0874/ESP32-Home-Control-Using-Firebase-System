@@ -5,6 +5,7 @@ Smart Schedules, and Power Usage tracking.
 """
 import asyncio
 import json
+import math
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -22,7 +23,7 @@ import os
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from auth import create_access_token, hash_password, verify_password, decode_token
@@ -228,40 +229,27 @@ async def seed_pre_registered_devices():
 async def seed_admin_user():
     """
     Manages the admin user on every startup:
-    1. If ADMIN_EMAIL + ADMIN_PASSWORD env vars are SET  → find that admin and
-       reset their password (useful for forgotten passwords).
-    2. If no admin exists at all                         → create one from env vars.
-    3. If an admin exists but env vars are at defaults   → just log and skip.
+    1. If ADMIN_EMAIL + ADMIN_PASSWORD env vars are SET  → upsert that email as admin
+       (creates or resets password — useful for force-resetting forgotten passwords).
+    2. If env vars NOT set → always upsert admin@apnaghar.com / Admin@1234
+       (so the canonical admin always exists in the deployed DB).
     """
-    admin_email    = os.environ.get("ADMIN_EMAIL", "")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "")
+    admin_email    = os.environ.get("ADMIN_EMAIL", "admin@apnaghar.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "Admin@1234")
     admin_name     = os.environ.get("ADMIN_NAME", "Admin")
 
     async with AsyncSessionLocal() as db:
-        # ── Case 1: env vars explicitly set → reset/create with those creds ──
-        if admin_email and admin_password:
-            # Try to find an existing user with that email
-            result = await db.execute(select(User).where(User.email == admin_email))
-            target = result.scalar_one_or_none()
+        result = await db.execute(select(User).where(User.email == admin_email))
+        target = result.scalar_one_or_none()
 
-            if target:
-                # User exists — promote to admin + reset password
-                target.is_admin = True
-                target.hashed_password = hash_password(admin_password)
-                await db.commit()
-                print(f"[Startup] ✅ Admin password reset for '{admin_email}'")
-                return
-
-            # Check if any other admin exists already (don't create a duplicate)
-            any_admin = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
-            if any_admin.scalar_one_or_none():
-                # Different email — just reset the ONE matching the env var email
-                # (user not found above, so nothing to reset; just warn)
-                print(f"[Startup] ⚠ ADMIN_EMAIL='{admin_email}' not found in DB.")
-                print( "[Startup]   Set ADMIN_EMAIL to an existing user's email to reset their password.")
-                return
-
-            # No admin at all — create fresh
+        if target:
+            # Always reset password + ensure admin flag is set
+            target.is_admin = True
+            target.hashed_password = hash_password(admin_password)
+            await db.commit()
+            print(f"[Startup] ✅ Admin ensured: '{admin_email}' (password refreshed)")
+        else:
+            # Create fresh admin user
             new_admin = User(
                 id=str(uuid.uuid4()),
                 name=admin_name,
@@ -273,31 +261,7 @@ async def seed_admin_user():
             )
             db.add(new_admin)
             await db.commit()
-            print(f"[Startup] ✅ Admin user created: email='{admin_email}' password='{admin_password}'")
-            return
-
-        # ── Case 2: env vars not set — only create if NO admin exists ──────
-        any_admin = await db.execute(select(User).where(User.is_admin == True))  # noqa: E712
-        existing_admin = any_admin.scalar_one_or_none()
-        if existing_admin:
-            print(f"[Startup] Admin user already exists: {existing_admin.email}")
-            return
-
-        # Create a default admin (first-time setup fallback)
-        default_email    = "admin@apnaghar.com"
-        default_password = "Admin@1234"
-        new_admin = User(
-            id=str(uuid.uuid4()),
-            name="Admin",
-            email=default_email,
-            hashed_password=hash_password(default_password),
-            device_id=None,
-            is_admin=True,
-            created_at=int(time.time()),
-        )
-        db.add(new_admin)
-        await db.commit()
-        print(f"[Startup] ✅ Default admin created: email='{default_email}' password='{default_password}'")
+            print(f"[Startup] ✅ Admin created: email='{admin_email}'")
 
 
 @asynccontextmanager
@@ -358,7 +322,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     num_switches: int = 4
-    switch_names: list[str] = []
+    switch_names: List[str] = []
 
 class ClaimDeviceRequest(BaseModel):
     """Used by users to claim a pre-registered device ID and set their password."""
@@ -367,7 +331,7 @@ class ClaimDeviceRequest(BaseModel):
     email: str
     password: str
     num_switches: Optional[int] = None   # If None, use the pre-registered default
-    switch_names: list[str] = []
+    switch_names: List[str] = []
 
 class SeedDeviceRequest(BaseModel):
     """Admin: add a new pre-registered device ID."""
@@ -1045,7 +1009,6 @@ async def get_power_usage(
         }
 
     # Build daily breakdown (last 7 days) for chart
-    import math
     daily_breakdown = []
     for day_offset in range(days - 1, -1, -1):
         day_start = int(time.time()) - (day_offset + 1) * 86400
