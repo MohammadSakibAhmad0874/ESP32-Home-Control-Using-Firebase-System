@@ -1,5 +1,5 @@
 /* ========================================================================
-   HomeControl — Shared Design System
+   ApnaGhar — Shared Design System
    Dark mode · Glassmorphism · Premium feel
    ======================================================================== */
 
@@ -710,13 +710,64 @@ input::placeholder { color: var(--text-3); }
 .connecting-overlay p { font-size: 15px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
+
+/* ── Tablet (max 768px) ── */
+@media (max-width: 768px) {
+  .container { padding: 0 14px; }
+  .page-header { padding: 20px 0 14px; }
+  .page-header h1 { font-size: 20px; }
+  .relays-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+/* ── Mobile (max 640px) ── */
 @media (max-width: 640px) {
-  .card { padding: 22px 18px; }
+  .card { padding: 20px 16px; }
   .relays-grid { grid-template-columns: 1fr 1fr; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .admin-device-header { flex-direction: column; align-items: flex-start; }
+
+  /* Navbar: compact on mobile */
+  .navbar { padding: 0 12px; }
+  .navbar-inner { height: 54px; gap: 8px; }
+  .nav-brand { font-size: 15px; }
+  .nav-user { display: none; }
+
+  /* Device info bar: stack items */
+  .device-info-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  /* Bigger touch targets */
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 36px; padding: 6px 12px; }
+  .toggle-switch { width: 56px; height: 30px; }
+  .toggle-track::after { width: 22px; height: 22px; }
+  .toggle-switch input:checked + .toggle-track::after { left: 27px; }
+
+  .relay-card { padding: 16px; }
+  .period-selector { flex-wrap: wrap; }
+  .center-page { padding: 16px; }
+  .admin-device-actions { flex-wrap: wrap; }
 }
 
+/* ── Small phones (max 400px) ── */
 @media (max-width: 400px) {
   .relays-grid { grid-template-columns: 1fr; }
+  .card { padding: 16px 14px; }
+}
+
+/* ── iOS safe area / notch support ── */
+@supports (padding: max(0px)) {
+  .navbar {
+    padding-left: max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .center-page {
+    padding-left: max(24px, env(safe-area-inset-left));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
 }
