@@ -44,3 +44,6 @@ detailed.txt
 *.code-workspace
 .idea/
 *.iml
+
+.vercel
+.env*

@@ -1,0 +1,16 @@
+# ApnaGhar v2.0 — Live URLs
+
+## Web Dashboard (Vercel)
+https://web-iota-ruddy-37.vercel.app
+https://web-e4ev4gvmw-ahmadsakib263-4202s-projects.vercel.app
+
+## Local
+http://localhost:5173
+
+## Firebase Project
+https://console.firebase.google.com/project/apnaghar-3f865
+
+## GitHub
+https://github.com/MohammadSakibAhmad0874/ESP32-Home-Control-Using-Firebase-System
+
+Deployed: 2026-10-23 00:29
