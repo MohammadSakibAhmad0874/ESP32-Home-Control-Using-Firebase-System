@@ -1,20 +1,25 @@
-﻿# ApnaGhar v2.0 - Live URLs & Production Access
+================================================================================
+APNAGHAR v2.1 — PRODUCTION SYSTEM URLS & ARTIFACTS
+================================================================================
 
-## Web Dashboard (Vercel Production)
-- Clean Production URL: https://web-mjdtvq623-ahmadsakib263-4202s-projects.vercel.app
-- Production Alias: https://web-iota-ruddy-37.vercel.app
-- Direct Control Page: https://web-mjdtvq623-ahmadsakib263-4202s-projects.vercel.app/dashboard.html
+1. LIVE WEB DASHBOARD (PRODUCTION):
+   - Production Primary: https://web-iota-ruddy-37.vercel.app
+   - Direct Vercel Deployment: https://web-41fz9qyd5-ahmadsakib263-4202s-projects.vercel.app
+   - Backend API (Railway): https://esp32-home-control-using-firebase-system-production.up.railway.app
+   - Firebase Realtime Database: https://apnaghar-3f865-default-rtdb.firebaseio.com
 
-## Local Web Dashboard
-http://localhost:5173
+2. COMPILED ANDROID RELEASES:
+   - Fixed 3D Glassmorphic APK: ApnaGhar-v2.2-3D-Glass.apk (57.3 MB)
+   - Pipeline Release APK: ApnaGhar-v2.1-fixed.apk (57.3 MB)
 
-## Firebase Realtime Database
-https://apnaghar-3f865-default-rtdb.firebaseio.com/devices/SH-001.json
+3. SECURITY POSTURE & VERIFICATION:
+   - Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+   - Content-Security-Policy (CSP) active
+   - X-Content-Type-Options: nosniff
+   - X-Frame-Options: DENY
+   - X-XSS-Protection: 1; mode=block
+   - Public robots.txt: Disallow /admin
+   - Public manifest.json & favicon.ico
+   - Legal Pages: /privacy and /terms
 
-## GitHub Repository
-https://github.com/MohammadSakibAhmad0874/ESP32-Home-Control-Using-Firebase-System
-
-## Production Artifacts
-- Signed Release APK: ./ApnaGhar-v2.0-release.apk (54.7 MB)
-- Play Store Bundle: ./ApnaGhar-v2.0-release.aab (44.8 MB)
-- Executive Presentation: ./ApnaGhar_v2.0_Executive_Presentation.pptx (15 Slides, Glassmorphism, Layman explanations)
+================================================================================

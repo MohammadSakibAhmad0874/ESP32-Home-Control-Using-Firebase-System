@@ -7,7 +7,8 @@ import 'dashboard_screen.dart';
 import 'admin_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final int initialTab;
+  const LoginScreen({super.key, this.initialTab = 0});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -42,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 3, vsync: this, initialIndex: widget.initialTab.clamp(0, 2));
     _tabs.addListener(() => setState(() => _error = null));
   }
 

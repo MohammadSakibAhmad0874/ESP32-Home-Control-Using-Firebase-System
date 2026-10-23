@@ -1,0 +1,16 @@
+{
+  "short_name": "ApnaGhar",
+  "name": "ApnaGhar — Smart Home Control",
+  "icons": [
+    {
+      "src": "/hero-3d-mockup.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0B0E14",
+  "theme_color": "#00D9FF",
+  "display": "standalone",
+  "orientation": "portrait"
+}
