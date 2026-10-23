@@ -1,0 +1,28 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "name": "ApnaGhar Smart Home",
+          "summary": "Control your ApnaGhar lights and fans with voice.",
+          "description": "ApnaGhar voice control integration for ESP32 smart home switches. Supports turning on, turning off, and checking device states."
+        },
+        "en-IN": {
+          "name": "ApnaGhar Smart Home",
+          "summary": "Control your ApnaGhar switches with Alexa.",
+          "description": "Control lights, fans, and appliances connected to your ApnaGhar ESP32 controller using Hindi and English voice commands."
+        }
+      },
+      "category": "SMART_HOME"
+    },
+    "apis": {
+      "smartHome": {
+        "endpoint": {
+          "uri": "arn:aws:lambda:us-east-1:123456789012:function:ApnaGharSmartHomeSkill"
+        },
+        "protocolVersion": "3"
+      }
+    },
+    "manifestVersion": "1.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "manifest": {
+    "displayName": "ApnaGhar Smart Home",
+    "invocationName": "ApnaGhar",
+    "category": "SMART_HOME"
+  },
+  "actions": [
+    {
+      "name": "MAIN",
+      "fulfillment": {
+        "conversationName": "apnaghar_fulfillment"
+      },
+      "intent": {
+        "name": "actions.devices"
+      }
+    }
+  ],
+  "conversations": {
+    "apnaghar_fulfillment": {
+      "name": "apnaghar_fulfillment",
+      "url": "https://us-central1-apnaghar-3f865.cloudfunctions.net/smarthome"
+    }
+  }
+}

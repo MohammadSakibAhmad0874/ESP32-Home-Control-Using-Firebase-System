@@ -1,0 +1,9 @@
+{
+  "name": "apnaghar-alexa-skill-lambda",
+  "version": "2.0.0",
+  "description": "AWS Lambda Smart Home v3 directive handler for ApnaGhar ESP32 switches",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

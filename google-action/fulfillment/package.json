@@ -1,0 +1,14 @@
+{
+  "name": "apnaghar-google-home-fulfillment",
+  "version": "2.0.0",
+  "description": "Google Assistant Smart Home SYNC/QUERY/EXECUTE fulfillment for ApnaGhar",
+  "main": "index.js",
+  "dependencies": {
+    "actions-on-google": "^2.14.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.7.0"
+  },
+  "engines": {
+    "node": "18"
+  }
+}
