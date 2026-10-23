@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('devices').child($deviceId).val() === true || root.child('users').child(auth.uid).child('role').val() === 'admin')",
+        "relays": {
+          "$relayId": {
+            "state": {
+              ".validate": "newData.isBoolean()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            }
+          }
+        },
+        "power": {
+          "voltage": { ".validate": "newData.isNumber()" },
+          "current": { ".validate": "newData.isNumber()" },
+          "power": { ".validate": "newData.isNumber()" },
+          "energy": { ".validate": "newData.isNumber()" },
+          "frequency": { ".validate": "newData.isNumber()" }
+        },
+        "online": {
+          ".validate": "newData.isBoolean()"
+        },
+        "lastSeen": {
+          ".validate": "newData.isNumber()"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

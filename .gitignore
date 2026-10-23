@@ -3,24 +3,44 @@
 firebase-debug.log
 .firebaserc
 
+# Environment & Secrets
+.env
+*.env
+*.env.local
+backend/.env
+*.jks
+*.keystore
+
 # Node / npm
 node_modules/
 npm-debug.log
+yarn-error.log
 
-# Arduino build artifacts
+# Arduino / PlatformIO build artifacts
 *.hex
 *.elf
 *.bin
 build/
+.pio/
 
-# OS files
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.apk
+*.aab
+
+# OS & Office lock files
 .DS_Store
 Thumbs.db
 desktop.ini
+~$*
+*.docx
+detailed.txt
 
 # Editor
 .vscode/
 *.code-workspace
-
-# Secrets (never commit these!)
-# firebaseSync.h has FIREBASE_AUTH - make sure to remove the real secret before committing
+.idea/
+*.iml
