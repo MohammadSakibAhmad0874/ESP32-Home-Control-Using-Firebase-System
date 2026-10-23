@@ -1,0 +1,13 @@
+{
+  "name": "apnaghar-fcm-notifications",
+  "version": "2.0.0",
+  "description": "Firebase Cloud Functions for ApnaGhar Smart Home Push Notifications",
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^4.7.0"
+  },
+  "engines": {
+    "node": "18"
+  }
+}
