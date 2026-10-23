@@ -1,16 +1,20 @@
-# ApnaGhar v2.0 — Live URLs
+ï»¿# ApnaGhar v2.0 - Live URLs & Production Access
 
-## Web Dashboard (Vercel)
-https://web-iota-ruddy-37.vercel.app
-https://web-e4ev4gvmw-ahmadsakib263-4202s-projects.vercel.app
+## Web Dashboard (Vercel Production)
+- Clean Production URL: https://web-mjdtvq623-ahmadsakib263-4202s-projects.vercel.app
+- Production Alias: https://web-iota-ruddy-37.vercel.app
+- Direct Control Page: https://web-mjdtvq623-ahmadsakib263-4202s-projects.vercel.app/dashboard.html
 
-## Local
+## Local Web Dashboard
 http://localhost:5173
 
-## Firebase Project
-https://console.firebase.google.com/project/apnaghar-3f865
+## Firebase Realtime Database
+https://apnaghar-3f865-default-rtdb.firebaseio.com/devices/SH-001.json
 
-## GitHub
+## GitHub Repository
 https://github.com/MohammadSakibAhmad0874/ESP32-Home-Control-Using-Firebase-System
 
-Deployed: 2026-10-23 00:29
+## Production Artifacts
+- Signed Release APK: ./ApnaGhar-v2.0-release.apk (54.7 MB)
+- Play Store Bundle: ./ApnaGhar-v2.0-release.aab (44.8 MB)
+- Executive Presentation: ./ApnaGhar_v2.0_Executive_Presentation.pptx (15 Slides, Glassmorphism, Layman explanations)

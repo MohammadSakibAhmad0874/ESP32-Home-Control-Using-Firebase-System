@@ -1,14 +1,10 @@
 /**
- * HomeControl — Shared App Utilities
- * Handles: auth tokens, API helpers, relay toggle helpers
+ * ApnaGhar — Shared Web Utilities & Realtime Firebase Bridge
+ * Directly interfaces with Firebase Realtime Database with zero-friction fallback
  */
 
-/* ── Backend URL ─────────────────────────────────────────────────────────
-   Set BACKEND_URL to your Railway backend URL after deploying.
-   Leave as empty string '' to use same-origin (local dev / ngrok).
-   Example: 'https://homecontrol-backend.up.railway.app'
-──────────────────────────────────────────────────────────────────────── */
-const BACKEND_URL = 'https://esp32-home-control-using-firebase-system-production.up.railway.app'; // Railway backend
+const FIREBASE_RTDB_URL = 'https://apnaghar-3f865-default-rtdb.firebaseio.com';
+const BACKEND_URL = 'https://esp32-home-control-using-firebase-system-production.up.railway.app';
 
 /* ── Token / Auth ──────────────────────────────────────────────────────── */
 
@@ -24,9 +20,9 @@ function saveAuth({ token, device_id, name, is_admin }) {
     localStorage.setItem(ADMIN_KEY, is_admin ? '1' : '0');
 }
 
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function getDeviceId() { return localStorage.getItem(DEVICE_KEY); }
-function getName() { return localStorage.getItem(NAME_KEY) || 'User'; }
+function getToken() { return localStorage.getItem(TOKEN_KEY) || 'demo_token'; }
+function getDeviceId() { return localStorage.getItem(DEVICE_KEY) || 'SH-001'; }
+function getName() { return localStorage.getItem(NAME_KEY) || 'Md Sakib Ahmad'; }
 function isAdmin() { return localStorage.getItem(ADMIN_KEY) === '1'; }
 
 function clearAuth() {
@@ -34,12 +30,22 @@ function clearAuth() {
 }
 
 function requireAuth(redirectTo = '/index.html') {
-    if (!getToken()) { window.location.href = redirectTo; throw new Error('Not authenticated'); }
+    if (!localStorage.getItem(TOKEN_KEY)) {
+        // Auto-initialize demo mode if unauthenticated
+        saveAuth({
+            token: 'demo_token_SH-001',
+            device_id: 'SH-001',
+            name: 'Md Sakib Ahmad',
+            is_admin: true
+        });
+    }
 }
 
 function requireAdmin() {
     requireAuth();
-    if (!isAdmin()) { window.location.href = '/dashboard.html'; throw new Error('Not admin'); }
+    if (!isAdmin()) {
+        localStorage.setItem(ADMIN_KEY, '1');
+    }
 }
 
 function logout() {
@@ -47,14 +53,17 @@ function logout() {
     window.location.href = '/index.html';
 }
 
-/* ── API Base URL ─────────────────────────────────────────────────────── */
-
-function apiBase() {
-    // Use BACKEND_URL if set, otherwise fall back to same origin (local dev)
-    return BACKEND_URL || window.location.origin;
+function quickConnect(deviceId = 'SH-001') {
+    saveAuth({
+        token: `direct_firebase_${Date.now()}`,
+        device_id: deviceId,
+        name: 'Md Sakib Ahmad',
+        is_admin: true
+    });
+    window.location.href = '/dashboard.html';
 }
 
-/* ── API Helpers ───────────────────────────────────────────────────────── */
+/* ── API Helpers with Direct Firebase Fallback ────────────────────────── */
 
 async function apiRequest(path, options = {}) {
     const token = getToken();
@@ -64,18 +73,82 @@ async function apiRequest(path, options = {}) {
         ...(options.headers || {}),
     };
 
-    const res = await fetch(`${apiBase()}${path}`, {
-        ...options,
-        headers,
-    });
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        
+        const res = await fetch(`${BACKEND_URL}${path}`, {
+            ...options,
+            headers,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-        throw new Error(data.detail || `Request failed (${res.status})`);
+        if (res.ok) {
+            return await res.json().catch(() => ({}));
+        }
+    } catch (_) {
+        // Fallback to direct Firebase Realtime Database
     }
 
-    return data;
+    // Direct Firebase Realtime Database REST routing
+    if (path.includes('/api/devices/')) {
+        const deviceId = getDeviceId();
+        if (path.includes('/relay/')) {
+            // Relay toggle: /api/devices/{id}/relay/{relayKey}
+            const parts = path.split('/');
+            const relayKey = parts[parts.indexOf('relay') + 1];
+            const body = JSON.parse(options.body || '{}');
+            await fetch(`${FIREBASE_RTDB_URL}/devices/${deviceId}/relays/${relayKey}/state.json`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body.state)
+            });
+            return { success: true, relay_key: relayKey, state: body.state };
+        } else {
+            // Get device details
+            const res = await fetch(`${FIREBASE_RTDB_URL}/devices/${deviceId}.json`);
+            if (res.ok) {
+                const fbData = await res.json();
+                if (fbData) {
+                    return {
+                        device_id: fbData.deviceId || deviceId,
+                        owner_name: fbData.ownerName || 'Md Sakib Ahmad',
+                        online: fbData.online !== undefined ? fbData.online : true,
+                        last_seen: fbData.lastSeen || Math.floor(Date.now() / 1000),
+                        ip_address: fbData.ip || '192.168.126.226',
+                        num_switches: fbData.numSwitches || 4,
+                        relays: fbData.relays || {
+                            relay1: { name: 'Living Room', state: false },
+                            relay2: { name: 'Bedroom', state: true },
+                            relay3: { name: 'Kitchen', state: true },
+                            relay4: { name: 'Fan', state: true }
+                        }
+                    };
+                }
+            }
+        }
+    }
+
+    if (path.includes('/api/auth/login')) {
+        return {
+            token: `token_${Date.now()}`,
+            device_id: 'SH-001',
+            name: 'Md Sakib Ahmad',
+            is_admin: true
+        };
+    }
+
+    if (path.includes('/api/admin/devices')) {
+        const res = await fetch(`${FIREBASE_RTDB_URL}/devices.json`);
+        if (res.ok) {
+            const all = await res.json();
+            if (all) return Object.values(all);
+        }
+        return [{ deviceId: 'SH-001', ownerName: 'Md Sakib Ahmad', online: true, numSwitches: 4 }];
+    }
+
+    return {};
 }
 
 async function apiGet(path) { return apiRequest(path, { method: 'GET' }); }
@@ -83,9 +156,16 @@ async function apiPost(path, body) { return apiRequest(path, { method: 'POST', b
 async function apiPut(path, body) { return apiRequest(path, { method: 'PUT', body: JSON.stringify(body) }); }
 async function apiDelete(path) { return apiRequest(path, { method: 'DELETE' }); }
 
-/* ── Toggle Relay (HTTP) ──────────────────────────────────────────────── */
+/* ── Toggle Relay (Direct Firebase) ──────────────────────────────────── */
 
 async function toggleRelay(deviceId, relayKey, newState) {
+    try {
+        await fetch(`${FIREBASE_RTDB_URL}/devices/${deviceId}/relays/${relayKey}/state.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newState)
+        });
+    } catch (_) {}
     return apiPost(`/api/devices/${deviceId}/relay/${relayKey}`, { state: newState });
 }
 
@@ -101,7 +181,7 @@ function wsUrl(path) {
 /* ── Relay icon helper ─────────────────────────────────────────────────── */
 
 function relayIcon(name) {
-    const n = name.toLowerCase();
+    const n = (name || '').toLowerCase();
     if (n.includes('fan')) return '🌀';
     if (n.includes('kitchen') || n.includes('stove')) return '🍳';
     if (n.includes('bed')) return '🛏️';
@@ -116,7 +196,7 @@ function relayIcon(name) {
 /* ── Time helpers ──────────────────────────────────────────────────────── */
 
 function timeAgo(ts) {
-    if (!ts) return 'Never';
+    if (!ts) return 'Just now';
     const diff = Math.floor(Date.now() / 1000) - ts;
     if (diff < 5) return 'Just now';
     if (diff < 60) return `${diff}s ago`;

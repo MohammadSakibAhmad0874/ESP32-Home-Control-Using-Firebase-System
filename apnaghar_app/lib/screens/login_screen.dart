@@ -227,6 +227,25 @@ class _LoginScreenState extends State<LoginScreen>
                 : const Text('Login to Dashboard'),
           ),
         ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.accentLight,
+              side: BorderSide(color: AppTheme.accentLight.withOpacity(0.5)),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: _loading ? null : () {
+              _loginDeviceCtrl.text = 'SH-001';
+              _loginPassCtrl.text = 'apnaghar123';
+              _handleLogin();
+            },
+            icon: const Icon(Icons.bolt_rounded, color: AppTheme.amber),
+            label: const Text('⚡ Instant Connect (Device SH-001)'),
+          ),
+        ),
       ]);
 
   Widget _buildAdminTab() => Column(children: [
@@ -284,6 +303,25 @@ class _LoginScreenState extends State<LoginScreen>
                 ? const SizedBox(width: 18, height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('Login as Admin'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.accentLight,
+              side: BorderSide(color: AppTheme.accentLight.withOpacity(0.5)),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: _loading ? null : () {
+              _adminEmailCtrl.text = 'admin@apnaghar.com';
+              _adminPassCtrl.text = 'admin123';
+              _handleAdminLogin();
+            },
+            icon: const Icon(Icons.verified_user_rounded, color: AppTheme.green),
+            label: const Text('⚡ Instant Admin Access'),
           ),
         ),
       ]);

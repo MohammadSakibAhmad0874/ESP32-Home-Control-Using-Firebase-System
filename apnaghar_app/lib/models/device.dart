@@ -46,13 +46,13 @@ class Device {
       (k, v) => MapEntry(k, Relay.fromJson(k, v as Map<String, dynamic>)),
     );
     return Device(
-      deviceId: json['device_id'] ?? '',
-      ownerName: json['owner_name'] ?? '',
+      deviceId: json['device_id'] ?? json['deviceId'] ?? '',
+      ownerName: json['owner_name'] ?? json['ownerName'] ?? 'Home Owner',
       email: json['email'] ?? '',
-      numSwitches: json['num_switches'] ?? 4,
+      numSwitches: json['num_switches'] ?? json['numSwitches'] ?? 4,
       online: json['online'] ?? false,
-      lastSeen: json['last_seen'] ?? 0,
-      ipAddress: json['ip_address'] ?? '',
+      lastSeen: json['last_seen'] ?? json['lastSeen'] ?? 0,
+      ipAddress: json['ip_address'] ?? json['ip'] ?? '',
       relays: relays,
     );
   }

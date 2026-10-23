@@ -2,6 +2,9 @@
 // Update BACKEND_URL if your Railway URL changes.
 
 class ApiConfig {
+  static const String firebaseRtdbUrl =
+      'https://apnaghar-3f865-default-rtdb.firebaseio.com';
+
   static const String backendUrl =
       'https://esp32-home-control-using-firebase-system-production.up.railway.app';
 

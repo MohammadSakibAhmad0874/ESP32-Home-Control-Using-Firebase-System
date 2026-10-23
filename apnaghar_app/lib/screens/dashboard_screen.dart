@@ -27,6 +27,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _token;
   StreamSubscription? _wsSub;
 
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
@@ -38,9 +40,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _token = await AuthService.getToken();
     await _loadDevice();
     if (_deviceId != null && _token != null) {
-      _ws.connect(_deviceId!, _token!);
-      _wsSub = _ws.stream?.listen(_handleWsMessage);
+      try {
+        _ws.connect(_deviceId!, _token!);
+        _wsSub = _ws.stream?.listen(_handleWsMessage);
+      } catch (_) {}
     }
+    // Periodic real-time sync with Firebase
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) _loadDevice(silent: true);
+    });
   }
 
   void _handleWsMessage(Map<String, dynamic> msg) {
@@ -57,16 +65,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadDevice() async {
+  Future<void> _loadDevice({bool silent = false}) async {
     if (_deviceId == null) return;
-    setState(() { _loading = true; _error = null; });
+    if (!silent) {
+      setState(() { _loading = true; _error = null; });
+    }
     try {
       final data = await ApiService.getDevice(_deviceId!);
-      setState(() => _device = Device.fromJson(data));
+      if (mounted) {
+        setState(() {
+          _device = Device.fromJson(data);
+          _error = null;
+        });
+      }
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (!silent && mounted) setState(() => _error = e.message);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!silent && mounted) setState(() => _loading = false);
     }
   }
 
@@ -110,6 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _wsSub?.cancel();
     _ws.disconnect();
     super.dispose();
