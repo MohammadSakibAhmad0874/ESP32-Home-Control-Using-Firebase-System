@@ -20,7 +20,7 @@ function saveAuth({ token, device_id, name, is_admin }) {
     localStorage.setItem(ADMIN_KEY, is_admin ? '1' : '0');
 }
 
-function getToken() { return localStorage.getItem(TOKEN_KEY) || 'demo_token'; }
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function getDeviceId() { return localStorage.getItem(DEVICE_KEY) || 'SH-001'; }
 function getName() { return localStorage.getItem(NAME_KEY) || 'Md Sakib Ahmad'; }
 function isAdmin() { return localStorage.getItem(ADMIN_KEY) === '1'; }
@@ -30,32 +30,29 @@ function clearAuth() {
 }
 
 function requireAuth(redirectTo = '/index.html') {
-    if (!localStorage.getItem(TOKEN_KEY)) {
-        // Auto-initialize demo mode if unauthenticated
-        saveAuth({
-            token: 'demo_token_SH-001',
-            device_id: 'SH-001',
-            name: 'Md Sakib Ahmad',
-            is_admin: true
-        });
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+        window.location.replace(redirectTo);
+        throw new Error('Not authenticated');
     }
 }
 
 function requireAdmin() {
     requireAuth();
     if (!isAdmin()) {
-        localStorage.setItem(ADMIN_KEY, '1');
+        window.location.replace('/dashboard.html');
+        throw new Error('Not admin');
     }
 }
 
 function logout() {
     clearAuth();
-    window.location.href = '/index.html';
+    window.location.replace('/index.html');
 }
 
 function quickConnect(deviceId = 'SH-001') {
     saveAuth({
-        token: `direct_firebase_${Date.now()}`,
+        token: `session_${Date.now()}`,
         device_id: deviceId,
         name: 'Md Sakib Ahmad',
         is_admin: true
@@ -75,7 +72,7 @@ async function apiRequest(path, options = {}) {
 
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
         
         const res = await fetch(`${BACKEND_URL}${path}`, {
             ...options,
@@ -106,23 +103,44 @@ async function apiRequest(path, options = {}) {
             });
             return { success: true, relay_key: relayKey, state: body.state };
         } else {
-            // Get device details
+            // Get device details from real Firebase RTDB
             const res = await fetch(`${FIREBASE_RTDB_URL}/devices/${deviceId}.json`);
             if (res.ok) {
                 const fbData = await res.json();
                 if (fbData) {
+                    // Calculate real online status based on real heartbeat and timestamp
+                    let isOnline = false;
+                    let lastSeenTs = 0;
+                    const nowSec = Math.floor(Date.now() / 1000);
+
+                    if (fbData.lastSeen) {
+                        let ts = fbData.lastSeen;
+                        if (ts > 1000000000000) ts = Math.floor(ts / 1000);
+                        // If it's a realistic modern epoch timestamp (within last 90s)
+                        if (ts > 1700000000) {
+                            if (nowSec - ts < 90 && fbData.online === true) {
+                                isOnline = true;
+                            }
+                            lastSeenTs = ts;
+                        } else {
+                            // Raw uptime or stale counter -> device is offline
+                            isOnline = false;
+                            lastSeenTs = 0;
+                        }
+                    }
+
                     return {
                         device_id: fbData.deviceId || deviceId,
                         owner_name: fbData.ownerName || 'Md Sakib Ahmad',
-                        online: fbData.online !== undefined ? fbData.online : true,
-                        last_seen: fbData.lastSeen || Math.floor(Date.now() / 1000),
-                        ip_address: fbData.ip || '192.168.126.226',
+                        online: isOnline,
+                        last_seen: lastSeenTs,
+                        ip_address: isOnline ? (fbData.ip || '192.168.1.100') : '—',
                         num_switches: fbData.numSwitches || 4,
                         relays: fbData.relays || {
                             relay1: { name: 'Living Room', state: false },
-                            relay2: { name: 'Bedroom', state: true },
-                            relay3: { name: 'Kitchen', state: true },
-                            relay4: { name: 'Fan', state: true }
+                            relay2: { name: 'Bedroom', state: false },
+                            relay3: { name: 'Kitchen', state: false },
+                            relay4: { name: 'Fan', state: false }
                         }
                     };
                 }
@@ -143,9 +161,17 @@ async function apiRequest(path, options = {}) {
         const res = await fetch(`${FIREBASE_RTDB_URL}/devices.json`);
         if (res.ok) {
             const all = await res.json();
-            if (all) return Object.values(all);
+            if (all) {
+                return Object.values(all).map(d => ({
+                    deviceId: d.deviceId || 'SH-001',
+                    ownerName: d.ownerName || 'Md Sakib Ahmad',
+                    online: false, // Accurate offline state until hardware boots
+                    numSwitches: d.numSwitches || 4,
+                    ip: d.ip || '—'
+                }));
+            }
         }
-        return [{ deviceId: 'SH-001', ownerName: 'Md Sakib Ahmad', online: true, numSwitches: 4 }];
+        return [{ deviceId: 'SH-001', ownerName: 'Md Sakib Ahmad', online: false, numSwitches: 4 }];
     }
 
     return {};
@@ -196,12 +222,14 @@ function relayIcon(name) {
 /* ── Time helpers ──────────────────────────────────────────────────────── */
 
 function timeAgo(ts) {
-    if (!ts) return 'Just now';
+    if (!ts || ts === 0) return 'Offline (Device powered off)';
     const diff = Math.floor(Date.now() / 1000) - ts;
-    if (diff < 5) return 'Just now';
+    if (diff < 0) return 'Just now';
+    if (diff < 10) return 'Just now';
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff > 86400 * 30) return 'Offline (Device powered off)';
     return `${Math.floor(diff / 86400)}d ago`;
 }
 
